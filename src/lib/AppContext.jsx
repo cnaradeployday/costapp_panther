@@ -17,15 +17,37 @@ export function AppProvider({ children }) {
     } catch {}
   }
 
-  async function loadProfile(userId) {
+  async function loadProfile(sessionUser) {
     try {
-      const { data } = await supabase
+      // Intentar por id primero, luego por email
+      let { data } = await supabase
         .from('user_profiles')
         .select('*')
-        .eq('id', userId)
+        .eq('id', sessionUser.id)
         .maybeSingle()
+
+      if (!data && sessionUser.email) {
+        const res = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('email', sessionUser.email)
+          .maybeSingle()
+        data = res.data
+
+        // Si lo encontró por email pero el id no matchea, actualizar el id
+        if (data && data.id !== sessionUser.id) {
+          await supabase
+            .from('user_profiles')
+            .update({ id: sessionUser.id })
+            .eq('email', sessionUser.email)
+          data.id = sessionUser.id
+        }
+      }
+
       setProfile(data)
-    } catch {}
+    } catch (e) {
+      console.error('loadProfile error:', e)
+    }
   }
 
   useEffect(() => {
@@ -34,7 +56,7 @@ export function AppProvider({ children }) {
       const { data: { session } } = await supabase.auth.getSession()
       if (session?.user) {
         setUser(session.user)
-        await loadProfile(session.user.id)
+        await loadProfile(session.user)
       }
       setLoading(false)
     }
@@ -43,7 +65,7 @@ export function AppProvider({ children }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         setUser(session.user)
-        await loadProfile(session.user.id)
+        await loadProfile(session.user)
       } else {
         setUser(null)
         setProfile(null)
