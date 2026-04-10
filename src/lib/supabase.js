@@ -24,7 +24,12 @@ export async function signOut() {
 export async function getCurrentProfile() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
-  const { data } = await supabase.from('user_profiles').select('*').eq('id', user.id).single()
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .eq('id', user.id)
+    .maybeSingle()
+  if (error) console.error('Profile error:', error)
   return data
 }
 
