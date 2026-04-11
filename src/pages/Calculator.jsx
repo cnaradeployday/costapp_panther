@@ -3,9 +3,13 @@ import { getProducts, getPrintTechniques, getMarginTiers, getQtyBreaks } from '.
 import { useApp } from '../lib/AppContext'
 import { Calculator, FileSpreadsheet, FileText, Plus, X } from 'lucide-react'
 
-function getMargin(tiers, qty) {
+// Calcula el margen basado en el valor TOTAL de la compra (costo unitario × qty)
+function getMargin(tiers, totalOrderValue) {
   if (!tiers?.length) return 0
-  const tier = tiers.find(t => qty >= t.qty_from && (t.qty_to === null || qty <= t.qty_to))
+  const tier = tiers.find(t =>
+    totalOrderValue >= parseFloat(t.qty_from) &&
+    (t.qty_to === null || totalOrderValue <= parseFloat(t.qty_to))
+  )
   return tier ? parseFloat(tier.margin_pct) : 0
 }
 
@@ -23,7 +27,12 @@ function calcUnit(product, qty, selectedTechs) {
     const origUnit = origTotal / qty
     const hitUnit = hitCosts.reduce((s, tc) =>
       s + (parseFloat(tc.quantity) * parseFloat(tc.cost_items?.value_per_unit ?? 0)), 0)
-    return { id: tech.id, name: tech.name, origTotal, origUnit, hitUnit, total: origUnit + hitUnit, origCosts, hitCosts }
+    return {
+      id: tech.id, name: tech.name,
+      origTotal, origUnit, hitUnit,
+      total: origUnit + hitUnit,
+      origCosts, hitCosts
+    }
   })
 
   const printTotal = techniques.reduce((s, t) => s + t.total, 0)
@@ -79,23 +88,27 @@ export default function CalculatorPage() {
 
   const rows = product ? activeBreaks.map(qty => {
     const { fob, landedUnit, techniques: techs, costUnit } = calcUnit(product, qty, selTechs)
-    const marginPct = getMargin(tiers, qty)
-    const sellPrice = marginPct > 0 ? costUnit / (1 - marginPct / 100) : costUnit
-    return { qty, fob, landedUnit, techs, costUnit, marginPct, sellPrice }
+    const totalOrderValue = costUnit * qty
+    const marginPct = getMargin(tiers, totalOrderValue)
+    const sellUnit = marginPct > 0 ? costUnit / (1 - marginPct / 100) : costUnit
+    const sellTotal = sellUnit * qty
+    return { qty, fob, landedUnit, techs, costUnit, totalOrderValue, marginPct, sellUnit, sellTotal }
   }) : []
 
   async function exportExcel() {
     if (!product || !rows.length) return
     const { default: XLSX } = await import('xlsx')
     const cur = config?.currency_code ?? ''
-    const headers = ['Qty', 'Landed unit', ...selTechs.map(t => t.name), 'Cost unit', 'Margin %', 'Sell price']
+    const headers = ['Qty', 'Landed unit', ...selTechs.map(t => t.name), 'Cost unit', 'Order value', 'Margin %', 'Sell unit', 'Sell total']
     const data = rows.map(r => [
       r.qty,
       r.landedUnit.toFixed(4),
       ...r.techs.map(t => t.total.toFixed(4)),
       r.costUnit.toFixed(4),
+      r.totalOrderValue.toFixed(2),
       r.marginPct + '%',
-      r.sellPrice.toFixed(4)
+      r.sellUnit.toFixed(4),
+      r.sellTotal.toFixed(2),
     ])
     const ws = XLSX.utils.aoa_to_sheet([
       [`${product.name} (${product.sku}) — Qty breaks`],
@@ -120,17 +133,18 @@ export default function CalculatorPage() {
     doc.text(`${product.name} — Qty Breaks`, 14, 18)
     doc.setFontSize(10); doc.setFont('helvetica', 'normal')
     doc.text(`${config?.company_name} · ${new Date().toLocaleDateString()}`, 14, 26)
-
     autoTable(doc, {
       startY: 32,
-      head: [['Qty', 'Landed', ...selTechs.map(t => t.name), 'Cost unit', 'Margin', 'Sell price']],
+      head: [['Qty', 'Landed', ...selTechs.map(t => t.name), 'Cost unit', 'Order value', 'Margin', 'Sell unit', 'Sell total']],
       body: rows.map(r => [
         r.qty,
         `${cur} ${r.landedUnit.toFixed(4)}`,
         ...r.techs.map(t => `${cur} ${t.total.toFixed(4)}`),
         `${cur} ${r.costUnit.toFixed(4)}`,
+        `${cur} ${r.totalOrderValue.toFixed(2)}`,
         `${r.marginPct}%`,
-        `${cur} ${r.sellPrice.toFixed(4)}`
+        `${cur} ${r.sellUnit.toFixed(4)}`,
+        `${cur} ${r.sellTotal.toFixed(2)}`,
       ]),
       headStyles: { fillColor: [30, 30, 30] },
       theme: 'striped',
@@ -165,7 +179,7 @@ export default function CalculatorPage() {
             <div className="flex flex-wrap gap-1.5 p-2 border border-gray-200 rounded-lg min-h-[42px]">
               {activeBreaks.map(qty => (
                 <span key={qty} className="flex items-center gap-1 bg-slate-100 text-slate-700 text-xs font-medium px-2 py-1 rounded-lg">
-                  {qty}
+                  {qty.toLocaleString()}
                   <button onClick={() => removeBreak(qty)} className="text-slate-400 hover:text-slate-700">
                     <X size={10}/>
                   </button>
@@ -205,8 +219,10 @@ export default function CalculatorPage() {
         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-5">
           <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-semibold text-gray-900">{product.name} <span className="text-gray-400 font-normal text-xs ml-1">{product.sku}</span></h2>
-              <p className="text-xs text-gray-400 mt-0.5">Margin applied automatically by quantity tier</p>
+              <h2 className="text-sm font-semibold text-gray-900">
+                {product.name} <span className="text-gray-400 font-normal text-xs ml-1">{product.sku}</span>
+              </h2>
+              <p className="text-xs text-gray-400 mt-0.5">Margin applied based on total order value</p>
             </div>
             <div className="flex gap-2">
               <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">
@@ -228,8 +244,10 @@ export default function CalculatorPage() {
                     <th key={t.id} className="text-right px-4 py-3">{t.name}</th>
                   ))}
                   <th className="text-right px-4 py-3">Cost unit</th>
+                  <th className="text-right px-4 py-3">Order value</th>
                   <th className="text-right px-4 py-3">Margin</th>
-                  <th className="text-right px-5 py-3 text-slate-900">Sell price</th>
+                  <th className="text-right px-4 py-3">Sell unit</th>
+                  <th className="text-right px-5 py-3 text-slate-900">Sell total</th>
                 </tr>
               </thead>
               <tbody>
@@ -241,10 +259,12 @@ export default function CalculatorPage() {
                       <td key={t.id} className="text-right px-4 py-3 font-mono text-gray-500 text-xs">{fmt(t.total)}</td>
                     ))}
                     <td className="text-right px-4 py-3 font-mono text-gray-700 text-xs">{fmt(r.costUnit)}</td>
+                    <td className="text-right px-4 py-3 font-mono text-gray-500 text-xs">{fmt(r.totalOrderValue)}</td>
                     <td className="text-right px-4 py-3">
                       <span className="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-lg font-medium">{r.marginPct}%</span>
                     </td>
-                    <td className="text-right px-5 py-3 font-mono font-semibold text-slate-900">{fmt(r.sellPrice)}</td>
+                    <td className="text-right px-4 py-3 font-mono text-gray-700 text-xs">{fmt(r.sellUnit)}</td>
+                    <td className="text-right px-5 py-3 font-mono font-semibold text-slate-900">{fmt(r.sellTotal)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -252,13 +272,17 @@ export default function CalculatorPage() {
           </div>
 
           {/* Margin tiers legend */}
-          <div className="px-6 py-3 border-t border-gray-50 flex flex-wrap gap-3">
-            {tiers.map(t => (
-              <span key={t.id} className="text-xs text-gray-400">
-                {t.qty_from.toLocaleString()}–{t.qty_to ? t.qty_to.toLocaleString() : '∞'} units → <span className="font-medium text-gray-600">{t.margin_pct}% margin</span>
-              </span>
-            ))}
-          </div>
+          {tiers.length > 0 && (
+            <div className="px-6 py-3 border-t border-gray-50 flex flex-wrap gap-4">
+              <span className="text-xs text-gray-400 font-medium uppercase tracking-wider mr-2">Margin tiers:</span>
+              {tiers.map(t => (
+                <span key={t.id} className="text-xs text-gray-400">
+                  {config?.currency_symbol}{parseFloat(t.qty_from).toLocaleString()}–{t.qty_to ? `${config?.currency_symbol}${parseFloat(t.qty_to).toLocaleString()}` : '∞'}
+                  {' → '}<span className="font-medium text-gray-600">{t.margin_pct}%</span>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

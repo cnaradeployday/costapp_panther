@@ -8,14 +8,13 @@ import { useApp } from '../lib/AppContext'
 import { Btn, Input, Toast, PageHeader, Confirm } from '../components/ui'
 
 export default function MarginsPage() {
-  const { fmt } = useApp()
+  const { currency } = useApp()
   const [tiers, setTiers] = useState([])
   const [breaks, setBreaks] = useState([])
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState(null)
   const [confirm, setConfirm] = useState(null)
 
-  // Forms
   const [tierForm, setTierForm] = useState({ qty_from: '', qty_to: '', margin_pct: '' })
   const [breakForm, setBreakForm] = useState({ quantity: '' })
   const [savingTier, setSavingTier] = useState(false)
@@ -37,8 +36,8 @@ export default function MarginsPage() {
     setSavingTier(true)
     try {
       await upsertMarginTier({
-        qty_from: parseInt(tierForm.qty_from),
-        qty_to: tierForm.qty_to ? parseInt(tierForm.qty_to) : null,
+        qty_from: parseFloat(tierForm.qty_from),
+        qty_to: tierForm.qty_to ? parseFloat(tierForm.qty_to) : null,
         margin_pct: parseFloat(tierForm.margin_pct),
       })
       setTierForm({ qty_from: '', qty_to: '', margin_pct: '' })
@@ -61,11 +60,7 @@ export default function MarginsPage() {
     if (!qty || qty <= 0) return
     setSavingBreak(true)
     try {
-      await upsertQtyBreak({
-        quantity: qty,
-        is_default: true,
-        sort_order: breaks.length + 1
-      })
+      await upsertQtyBreak({ quantity: qty, is_default: true, sort_order: breaks.length + 1 })
       setBreakForm({ quantity: '' })
       setToast({ message: 'Saved', type: 'success' })
       await load()
@@ -89,9 +84,10 @@ export default function MarginsPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-        {/* Margin tiers */}
+        {/* Margin tiers — basado en valor total de la compra */}
         <div>
-          <h2 className="text-sm font-semibold text-gray-700 mb-3">Margin tiers</h2>
+          <h2 className="text-sm font-semibold text-gray-700 mb-1">Margin tiers</h2>
+          <p className="text-xs text-gray-400 mb-3">Based on total order value ({currency})</p>
           <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-3">
             {tiers.length === 0 ? (
               <p className="text-sm text-gray-400 p-5">No tiers configured</p>
@@ -99,8 +95,8 @@ export default function MarginsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 text-xs text-gray-400 font-medium uppercase tracking-wider">
-                    <th className="text-left px-4 py-3">From</th>
-                    <th className="text-left px-4 py-3">To</th>
+                    <th className="text-left px-4 py-3">Order value from</th>
+                    <th className="text-left px-4 py-3">Up to</th>
                     <th className="text-right px-4 py-3">Margin</th>
                     <th className="px-4 py-3"/>
                   </tr>
@@ -108,8 +104,8 @@ export default function MarginsPage() {
                 <tbody>
                   {tiers.map((t, i) => (
                     <tr key={t.id} className={`border-b border-gray-50 ${i === tiers.length - 1 ? 'border-0' : ''}`}>
-                      <td className="px-4 py-3 text-gray-700">{t.qty_from.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-gray-700">{t.qty_to ? t.qty_to.toLocaleString() : '∞'}</td>
+                      <td className="px-4 py-3 text-gray-700 font-mono">{currency} {parseFloat(t.qty_from).toLocaleString()}</td>
+                      <td className="px-4 py-3 text-gray-700 font-mono">{t.qty_to ? `${currency} ${parseFloat(t.qty_to).toLocaleString()}` : '∞'}</td>
                       <td className="px-4 py-3 text-right">
                         <span className="bg-amber-50 text-amber-700 text-xs font-semibold px-2 py-0.5 rounded-lg">{t.margin_pct}%</span>
                       </td>
@@ -126,14 +122,13 @@ export default function MarginsPage() {
             )}
           </div>
 
-          {/* Add tier form */}
           <div className="bg-white rounded-2xl border border-gray-100 p-4">
             <p className="text-xs font-medium text-gray-500 mb-3 uppercase tracking-wider">Add tier</p>
             <div className="grid grid-cols-3 gap-2 mb-3">
-              <Input label="From qty" type="number" min="0" placeholder="1"
+              <Input label={`From (${currency})`} type="number" min="0" placeholder="0"
                 value={tierForm.qty_from}
                 onChange={e => setTierForm(f => ({ ...f, qty_from: e.target.value }))} />
-              <Input label="To qty" type="number" min="0" placeholder="∞ (leave empty)"
+              <Input label={`Up to (${currency})`} type="number" min="0" placeholder="∞ leave empty"
                 value={tierForm.qty_to}
                 onChange={e => setTierForm(f => ({ ...f, qty_to: e.target.value }))} />
               <Input label="Margin %" type="number" min="0" max="100" step="0.1" placeholder="30"
@@ -146,9 +141,10 @@ export default function MarginsPage() {
           </div>
         </div>
 
-        {/* Qty breaks */}
+        {/* Qty breaks — cantidades para mostrar en calculadora */}
         <div>
-          <h2 className="text-sm font-semibold text-gray-700 mb-3">Default qty breaks</h2>
+          <h2 className="text-sm font-semibold text-gray-700 mb-1">Default qty breaks</h2>
+          <p className="text-xs text-gray-400 mb-3">Quantities shown in the calculator to compare unit cost</p>
           <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-3">
             {breaks.length === 0 ? (
               <p className="text-sm text-gray-400 p-5">No breaks configured</p>
@@ -156,7 +152,7 @@ export default function MarginsPage() {
               <div className="flex flex-wrap gap-2 p-4">
                 {breaks.map(b => (
                   <span key={b.id} className="flex items-center gap-1.5 bg-slate-100 text-slate-700 text-sm font-medium px-3 py-1.5 rounded-xl">
-                    {b.quantity.toLocaleString()} units
+                    {b.quantity.toLocaleString()}
                     <button onClick={() => setConfirm({ type: 'break', id: b.id })}
                       className="text-slate-400 hover:text-red-400 transition-colors">
                       <X size={12}/>
@@ -167,11 +163,10 @@ export default function MarginsPage() {
             )}
           </div>
 
-          {/* Add break form */}
           <div className="bg-white rounded-2xl border border-gray-100 p-4">
             <p className="text-xs font-medium text-gray-500 mb-3 uppercase tracking-wider">Add break</p>
             <div className="flex gap-2 items-end">
-              <Input label="Quantity" type="number" min="1" placeholder="e.g. 2500"
+              <Input label="Quantity (units)" type="number" min="1" placeholder="e.g. 2500"
                 value={breakForm.quantity}
                 onChange={e => setBreakForm({ quantity: e.target.value })}
                 className="flex-1" />
