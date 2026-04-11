@@ -49,14 +49,23 @@ export function AppProvider({ children }) {
   }
 
   useEffect(() => {
+    // Timeout de seguridad — si algo falla, no quedarse cargando para siempre
+    const timeout = setTimeout(() => setLoading(false), 5000)
+
     async function init() {
-      await loadConfig()
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user) {
-        setUser(session.user)
-        await loadProfile(session.user)
+      try {
+        await loadConfig()
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.user) {
+          setUser(session.user)
+          await loadProfile(session.user)
+        }
+      } catch (e) {
+        console.error('init error:', e)
+      } finally {
+        clearTimeout(timeout)
+        setLoading(false)
       }
-      setLoading(false)
     }
     init()
 
@@ -74,6 +83,7 @@ export function AppProvider({ children }) {
     window.addEventListener('beforeunload', handleUnload)
 
     return () => {
+      clearTimeout(timeout)
       subscription.unsubscribe()
       window.removeEventListener('beforeunload', handleUnload)
     }
