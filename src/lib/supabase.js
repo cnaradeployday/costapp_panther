@@ -7,7 +7,13 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw new Error('Faltan las variables de entorno VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY')
 }
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false
+  }
+})
 
 // ── Auth helpers ──────────────────────────────────────────────
 export async function signIn(email, password) {
