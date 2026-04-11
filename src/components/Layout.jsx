@@ -1,9 +1,11 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Calculator, Tag, Printer, Package, Users, Settings, LogOut, Menu, Percent } from 'lucide-react'
+import { Calculator, Tag, Printer, Package, Users, Settings, LogOut, Menu, Percent, Ruler } from 'lucide-react'
 import { useState } from 'react'
 import { useApp } from '../lib/AppContext'
 import { signOut } from '../lib/supabase'
 import logo from '../assets/logopanther.jpg'
+
+const APP_VERSION = '1.2.0'
 
 export default function Layout({ children }) {
   const { profile, config, T } = useApp()
@@ -17,6 +19,7 @@ export default function Layout({ children }) {
     { to: '/', icon: Calculator, label: T('calculator') },
     ...(isAdmin ? [
       { to: '/costs', icon: Tag, label: T('costs') },
+      { to: '/units', icon: Ruler, label: 'Units of measure' },
       { to: '/techniques', icon: Printer, label: T('techniques') },
       { to: '/products', icon: Package, label: T('products') },
       { to: '/margins', icon: Percent, label: 'Margins & Breaks' },
@@ -43,7 +46,6 @@ export default function Layout({ children }) {
           </div>
         </div>
       </div>
-
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         {navItems.map(({ to, icon: Icon, label }) => (
           <NavLink key={to} to={to} end={to === '/'}
@@ -57,7 +59,6 @@ export default function Layout({ children }) {
           </NavLink>
         ))}
       </nav>
-
       <div className="px-3 py-4 border-t border-gray-100">
         <div className="px-3 py-2 mb-2">
           <p className="text-xs font-medium text-gray-900 truncate">{profile?.email}</p>
@@ -68,6 +69,7 @@ export default function Layout({ children }) {
           <LogOut size={16} />
           {T('logout')}
         </button>
+        <p className="text-center text-xs text-gray-300 mt-3">v{APP_VERSION}</p>
       </div>
     </div>
   )
@@ -77,7 +79,6 @@ export default function Layout({ children }) {
       <aside className="hidden md:flex flex-col w-60 bg-white border-r border-gray-100 shrink-0">
         <SidebarContent />
       </aside>
-
       {mobileOpen && (
         <div className="fixed inset-0 z-40 flex md:hidden">
           <div className="fixed inset-0 bg-black/40" onClick={() => setMobileOpen(false)} />
@@ -86,7 +87,6 @@ export default function Layout({ children }) {
           </aside>
         </div>
       )}
-
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100">
           <button onClick={() => setMobileOpen(true)} className="p-2 rounded-lg hover:bg-gray-100">
