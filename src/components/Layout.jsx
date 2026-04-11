@@ -1,8 +1,8 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { Calculator, Tag, Printer, Package, Users, Settings, LogOut, Menu } from 'lucide-react'
 import { useState } from 'react'
-import { useApp } from '../lib/AppContext'
-import { signOut } from '../lib/supabase'
+import { useApp } from './AppContext'
+import { signOut } from './supabase'
 import logo from '../assets/logopanther.jpg'
 
 export default function Layout({ children }) {
@@ -33,7 +33,6 @@ export default function Layout({ children }) {
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
-      {/* Logo + empresa */}
       <div className="px-5 py-5 border-b border-gray-100">
         <div className="flex items-center gap-3 mb-2">
           <img src={logo} alt="Logo" className="w-10 h-10 rounded-lg object-cover" />
