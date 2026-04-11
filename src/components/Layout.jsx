@@ -1,8 +1,8 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { Calculator, Tag, Printer, Package, Users, Settings, LogOut, Menu } from 'lucide-react'
 import { useState } from 'react'
-import { useApp } from './AppContext'
-import { signOut } from './supabase'
+import { useApp } from '../lib/AppContext'
+import { signOut } from '../lib/supabase'
 import logo from '../assets/logopanther.jpg'
 
 export default function Layout({ children }) {
