@@ -1,8 +1,9 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Calculator, Tag, Printer, Package, Users, Settings, LogOut, Menu, X } from 'lucide-react'
+import { Calculator, Tag, Printer, Package, Users, Settings, LogOut, Menu } from 'lucide-react'
 import { useState } from 'react'
 import { useApp } from '../lib/AppContext'
 import { signOut } from '../lib/supabase'
+import logo from '../assets/logopanther.jpg'
 
 export default function Layout({ children }) {
   const { profile, config, T } = useApp()
@@ -32,11 +33,15 @@ export default function Layout({ children }) {
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
+      {/* Logo + empresa */}
       <div className="px-5 py-5 border-b border-gray-100">
-        <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-0.5">
-          {config?.currency_code} · {config?.language?.toUpperCase()}
-        </p>
-        <h2 className="text-base font-semibold text-gray-900 truncate">{config?.company_name}</h2>
+        <div className="flex items-center gap-3 mb-2">
+          <img src={logo} alt="Logo" className="w-10 h-10 rounded-lg object-cover" />
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900 truncate">{config?.company_name}</h2>
+            <p className="text-xs text-gray-400">{config?.currency_code} · {config?.language?.toUpperCase()}</p>
+          </div>
+        </div>
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
@@ -72,12 +77,10 @@ export default function Layout({ children }) {
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
-      {/* Sidebar desktop */}
       <aside className="hidden md:flex flex-col w-60 bg-white border-r border-gray-100 shrink-0">
         <SidebarContent />
       </aside>
 
-      {/* Mobile overlay */}
       {mobileOpen && (
         <div className="fixed inset-0 z-40 flex md:hidden">
           <div className="fixed inset-0 bg-black/40" onClick={() => setMobileOpen(false)} />
@@ -87,14 +90,15 @@ export default function Layout({ children }) {
         </div>
       )}
 
-      {/* Main */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Mobile header */}
         <div className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100">
           <button onClick={() => setMobileOpen(true)} className="p-2 rounded-lg hover:bg-gray-100">
             <Menu size={20} />
           </button>
-          <span className="text-sm font-semibold text-gray-900">{config?.company_name}</span>
+          <div className="flex items-center gap-2">
+            <img src={logo} alt="Logo" className="w-7 h-7 rounded object-cover" />
+            <span className="text-sm font-semibold text-gray-900">{config?.company_name}</span>
+          </div>
           <div className="w-9" />
         </div>
 
