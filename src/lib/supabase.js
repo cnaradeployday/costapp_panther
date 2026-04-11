@@ -154,3 +154,51 @@ export async function updateUserRole(userId, role) {
   const { error } = await supabase.from('user_profiles').update({ role }).eq('id', userId)
   if (error) throw error
 }
+
+// ── Margin tiers ──────────────────────────────────────────────
+export async function getMarginTiers() {
+  const { data, error } = await supabase
+    .from('margin_tiers')
+    .select('*')
+    .order('qty_from')
+  if (error) throw error
+  return data
+}
+
+export async function upsertMarginTier(tier) {
+  const { data, error } = await supabase
+    .from('margin_tiers')
+    .upsert(tier)
+    .select().single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteMarginTier(id) {
+  const { error } = await supabase.from('margin_tiers').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Qty breaks ────────────────────────────────────────────────
+export async function getQtyBreaks() {
+  const { data, error } = await supabase
+    .from('qty_breaks')
+    .select('*')
+    .order('sort_order')
+  if (error) throw error
+  return data
+}
+
+export async function upsertQtyBreak(brk) {
+  const { data, error } = await supabase
+    .from('qty_breaks')
+    .upsert(brk)
+    .select().single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteQtyBreak(id) {
+  const { error } = await supabase.from('qty_breaks').delete().eq('id', id)
+  if (error) throw error
+}

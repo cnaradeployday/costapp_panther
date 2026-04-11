@@ -1,205 +1,147 @@
-import { useEffect, useState, useCallback } from 'react'
-import { getProducts, getPrintTechniques } from '../lib/supabase'
+import { useEffect, useState } from 'react'
+import { getProducts, getPrintTechniques, getMarginTiers, getQtyBreaks } from '../lib/supabase'
 import { useApp } from '../lib/AppContext'
-import { Btn, Select, EmptyState } from '../components/ui'
-import { FileSpreadsheet, FileText, Calculator } from 'lucide-react'
+import { Calculator, FileSpreadsheet, FileText, Plus, X } from 'lucide-react'
 
-function calcular(product, quantity, selectedTechniques) {
-  if (!product || !quantity || quantity <= 0) return null
+function getMargin(tiers, qty) {
+  if (!tiers?.length) return 0
+  const tier = tiers.find(t => qty >= t.qty_from && (t.qty_to === null || qty <= t.qty_to))
+  return tier ? parseFloat(tier.margin_pct) : 0
+}
 
-  // Landed unitario
+function calcUnit(product, qty, selectedTechs) {
   const fob = parseFloat(product.fob_price) || 0
-  const landedAdditions = product.product_costs?.reduce((s, pc) =>
+  const landedAdd = product.product_costs?.reduce((s, pc) =>
     s + (parseFloat(pc.quantity) * parseFloat(pc.cost_items?.value_per_unit ?? 0)), 0) ?? 0
-  const landedUnit = fob + landedAdditions
+  const landedUnit = fob + landedAdd
 
-  // Por cada técnica
-  const techniques = selectedTechniques.map(tech => {
+  const techniques = selectedTechs.map(tech => {
     const origCosts = tech.technique_costs?.filter(tc => tc.category === 'ORIGINATION') ?? []
     const hitCosts  = tech.technique_costs?.filter(tc => tc.category === 'HIT') ?? []
-
     const origTotal = origCosts.reduce((s, tc) =>
       s + (parseFloat(tc.quantity) * parseFloat(tc.cost_items?.value_per_unit ?? 0)), 0)
-    const origUnit = origTotal / quantity
-
+    const origUnit = origTotal / qty
     const hitUnit = hitCosts.reduce((s, tc) =>
       s + (parseFloat(tc.quantity) * parseFloat(tc.cost_items?.value_per_unit ?? 0)), 0)
-
-    return {
-      id: tech.id,
-      name: tech.name,
-      origTotal,
-      origUnit,
-      hitUnit,
-      total: origUnit + hitUnit,
-      origCosts,
-      hitCosts,
-    }
+    return { id: tech.id, name: tech.name, origTotal, origUnit, hitUnit, total: origUnit + hitUnit, origCosts, hitCosts }
   })
 
   const printTotal = techniques.reduce((s, t) => s + t.total, 0)
-  const grandTotal = landedUnit + printTotal
-
-  return { fob, landedAdditions, landedUnit, techniques, printTotal, grandTotal }
+  const costUnit = landedUnit + printTotal
+  return { fob, landedAdd, landedUnit, techniques, printTotal, costUnit }
 }
 
 export default function CalculatorPage() {
   const { T, fmt, config } = useApp()
   const [products, setProducts] = useState([])
   const [techniques, setTechniques] = useState([])
+  const [tiers, setTiers] = useState([])
+  const [defaultBreaks, setDefaultBreaks] = useState([])
   const [loading, setLoading] = useState(true)
 
   const [productId, setProductId] = useState('')
-  const [quantity, setQuantity] = useState('')
   const [selectedTechIds, setSelectedTechIds] = useState([])
-  const [result, setResult] = useState(null)
+  const [activeBreaks, setActiveBreaks] = useState([])
+  const [newBreakQty, setNewBreakQty] = useState('')
 
   useEffect(() => {
     async function load() {
-      const [prods, techs] = await Promise.all([getProducts(), getPrintTechniques()])
+      const [prods, techs, trs, brks] = await Promise.all([
+        getProducts(), getPrintTechniques(), getMarginTiers(), getQtyBreaks()
+      ])
       setProducts(prods.filter(p => p.active))
       setTechniques(techs.filter(t => t.active))
+      setTiers(trs)
+      setDefaultBreaks(brks)
+      setActiveBreaks(brks.map(b => b.quantity))
       setLoading(false)
     }
     load()
   }, [])
 
-  // Calcular en tiempo real cuando cambian los inputs
-  useEffect(() => {
-    const product = products.find(p => p.id === productId)
-    const selTechs = techniques.filter(t => selectedTechIds.includes(t.id))
-    const qty = parseFloat(quantity)
-    if (product && qty > 0) {
-      setResult(calcular(product, qty, selTechs))
-    } else {
-      setResult(null)
-    }
-  }, [productId, quantity, selectedTechIds, products, techniques])
-
   function toggleTech(id) {
-    setSelectedTechIds(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    )
+    setSelectedTechIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
+  function addBreak() {
+    const qty = parseInt(newBreakQty)
+    if (!qty || qty <= 0 || activeBreaks.includes(qty)) return
+    setActiveBreaks(prev => [...prev, qty].sort((a, b) => a - b))
+    setNewBreakQty('')
+  }
+
+  function removeBreak(qty) {
+    setActiveBreaks(prev => prev.filter(q => q !== qty))
+  }
+
+  const product = products.find(p => p.id === productId)
+  const selTechs = techniques.filter(t => selectedTechIds.includes(t.id))
+
+  const rows = product ? activeBreaks.map(qty => {
+    const { fob, landedUnit, techniques: techs, costUnit } = calcUnit(product, qty, selTechs)
+    const marginPct = getMargin(tiers, qty)
+    const sellPrice = marginPct > 0 ? costUnit / (1 - marginPct / 100) : costUnit
+    return { qty, fob, landedUnit, techs, costUnit, marginPct, sellPrice }
+  }) : []
+
   async function exportExcel() {
+    if (!product || !rows.length) return
     const { default: XLSX } = await import('xlsx')
-    const product = products.find(p => p.id === productId)
-    if (!result) return
-
-    const rows = [
-      ['CALCULADORA DE COSTOS', '', ''],
-      ['Empresa', config?.company_name, ''],
-      ['Fecha', new Date().toLocaleDateString(), ''],
-      ['', '', ''],
-      ['PRODUCTO', product?.name, ''],
-      ['SKU', product?.sku, ''],
-      ['NCM', product?.ncm, ''],
-      ['País origen', product?.origin_country, ''],
-      ['Cantidad', parseFloat(quantity), 'unidades'],
-      ['', '', ''],
-      ['COSTO LANDED', '', ''],
-      ['FOB unitario', result.fob, config?.currency_code],
-      ...((product?.product_costs ?? []).map(pc => [
-        pc.cost_items?.name, pc.quantity * pc.cost_items?.value_per_unit, config?.currency_code
-      ])),
-      ['TOTAL LANDED UNITARIO', result.landedUnit, config?.currency_code],
-      ['', '', ''],
-    ]
-
-    result.techniques.forEach(tech => {
-      rows.push([`TÉCNICA: ${tech.name}`, '', ''])
-      rows.push(['Origination total', tech.origTotal, config?.currency_code])
-      rows.push(['Origination prorrateado (÷ cantidad)', tech.origUnit, config?.currency_code])
-      rows.push(['HIT unitario', tech.hitUnit, config?.currency_code])
-      rows.push([`TOTAL TÉCNICA: ${tech.name}`, tech.total, config?.currency_code])
-      rows.push(['', '', ''])
-    })
-
-    rows.push(['COSTO UNITARIO TOTAL', result.grandTotal, config?.currency_code])
-
-    const ws = XLSX.utils.aoa_to_sheet(rows)
-    ws['!cols'] = [{ wch: 40 }, { wch: 20 }, { wch: 12 }]
+    const cur = config?.currency_code ?? ''
+    const headers = ['Qty', 'Landed unit', ...selTechs.map(t => t.name), 'Cost unit', 'Margin %', 'Sell price']
+    const data = rows.map(r => [
+      r.qty,
+      r.landedUnit.toFixed(4),
+      ...r.techs.map(t => t.total.toFixed(4)),
+      r.costUnit.toFixed(4),
+      r.marginPct + '%',
+      r.sellPrice.toFixed(4)
+    ])
+    const ws = XLSX.utils.aoa_to_sheet([
+      [`${product.name} (${product.sku}) — Qty breaks`],
+      [`Currency: ${cur}`],
+      [],
+      headers,
+      ...data
+    ])
+    ws['!cols'] = headers.map(() => ({ wch: 16 }))
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Costo')
-    XLSX.writeFile(wb, `costo_${product?.sku}_${quantity}u.xlsx`)
+    XLSX.utils.book_append_sheet(wb, ws, 'Qty Breaks')
+    XLSX.writeFile(wb, `qtybreaks_${product.sku}.xlsx`)
   }
 
   async function exportPDF() {
+    if (!product || !rows.length) return
     const { default: jsPDF } = await import('jspdf')
     const { default: autoTable } = await import('jspdf-autotable')
-    const product = products.find(p => p.id === productId)
-    if (!result) return
-
-    const doc = new jsPDF()
     const cur = config?.currency_code ?? ''
+    const doc = new jsPDF({ orientation: 'landscape' })
+    doc.setFontSize(16); doc.setFont('helvetica', 'bold')
+    doc.text(`${product.name} — Qty Breaks`, 14, 18)
+    doc.setFontSize(10); doc.setFont('helvetica', 'normal')
+    doc.text(`${config?.company_name} · ${new Date().toLocaleDateString()}`, 14, 26)
 
-    doc.setFontSize(18)
-    doc.setFont('helvetica', 'bold')
-    doc.text('Calculadora de costos', 14, 20)
-    doc.setFontSize(10)
-    doc.setFont('helvetica', 'normal')
-    doc.text(`${config?.company_name} · ${new Date().toLocaleDateString()}`, 14, 28)
-
-    doc.setFontSize(13)
-    doc.setFont('helvetica', 'bold')
-    doc.text('Producto', 14, 40)
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(10)
-    doc.text(`${product?.name} (${product?.sku}) · ${parseFloat(quantity)} unidades`, 14, 48)
-
-    // Tabla Landed
     autoTable(doc, {
-      startY: 56,
-      head: [['Concepto', 'Importe']],
-      body: [
-        ['FOB unitario', `${cur} ${result.fob.toFixed(4)}`],
-        ...((product?.product_costs ?? []).map(pc => [
-          pc.cost_items?.name,
-          `${cur} ${(pc.quantity * pc.cost_items?.value_per_unit).toFixed(4)}`
-        ])),
-        [{ content: 'Total landed unitario', styles: { fontStyle: 'bold' } },
-         { content: `${cur} ${result.landedUnit.toFixed(4)}`, styles: { fontStyle: 'bold' } }],
-      ],
-      theme: 'striped',
+      startY: 32,
+      head: [['Qty', 'Landed', ...selTechs.map(t => t.name), 'Cost unit', 'Margin', 'Sell price']],
+      body: rows.map(r => [
+        r.qty,
+        `${cur} ${r.landedUnit.toFixed(4)}`,
+        ...r.techs.map(t => `${cur} ${t.total.toFixed(4)}`),
+        `${cur} ${r.costUnit.toFixed(4)}`,
+        `${r.marginPct}%`,
+        `${cur} ${r.sellPrice.toFixed(4)}`
+      ]),
       headStyles: { fillColor: [30, 30, 30] },
+      theme: 'striped',
     })
-
-    result.techniques.forEach(tech => {
-      autoTable(doc, {
-        startY: doc.lastAutoTable.finalY + 8,
-        head: [[`Técnica: ${tech.name}`, '']],
-        body: [
-          ['Origination (total)', `${cur} ${tech.origTotal.toFixed(4)}`],
-          ['Origination (prorrateado)', `${cur} ${tech.origUnit.toFixed(4)}`],
-          ['HIT unitario', `${cur} ${tech.hitUnit.toFixed(4)}`],
-          [{ content: `Total ${tech.name}`, styles: { fontStyle: 'bold' } },
-           { content: `${cur} ${tech.total.toFixed(4)}`, styles: { fontStyle: 'bold' } }],
-        ],
-        theme: 'striped',
-        headStyles: { fillColor: [60, 60, 60] },
-      })
-    })
-
-    // Total final
-    autoTable(doc, {
-      startY: doc.lastAutoTable.finalY + 8,
-      body: [
-        [{ content: 'COSTO UNITARIO TOTAL', styles: { fontStyle: 'bold', fontSize: 13 } },
-         { content: `${cur} ${result.grandTotal.toFixed(4)}`, styles: { fontStyle: 'bold', fontSize: 13 } }],
-      ],
-      theme: 'plain',
-    })
-
-    doc.save(`costo_${product?.sku}_${quantity}u.pdf`)
+    doc.save(`qtybreaks_${product.sku}.pdf`)
   }
 
   if (loading) return <div className="text-center py-12 text-gray-400 text-sm">{T('loading')}</div>
 
-  const product = products.find(p => p.id === productId)
-
   return (
-    <div className="max-w-3xl">
+    <div>
       <div className="flex items-center gap-3 mb-7">
         <Calculator size={22} className="text-gray-400" />
         <h1 className="text-2xl font-semibold text-gray-900">{T('calculator_title')}</h1>
@@ -212,19 +154,31 @@ export default function CalculatorPage() {
             <label className="text-xs font-medium text-gray-600">{T('select_product')}</label>
             <select value={productId} onChange={e => setProductId(e.target.value)}
               className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white">
-              <option value="">— seleccionar producto —</option>
-              {products.map(p => (
-                <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
-              ))}
+              <option value="">— select product —</option>
+              {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>)}
             </select>
           </div>
 
+          {/* Qty breaks manager */}
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-600">{T('quantity_units')}</label>
-            <input type="number" min="1" step="1" value={quantity}
-              onChange={e => setQuantity(e.target.value)}
-              placeholder="Ej: 100"
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-slate-900" />
+            <label className="text-xs font-medium text-gray-600">Qty breaks</label>
+            <div className="flex flex-wrap gap-1.5 p-2 border border-gray-200 rounded-lg min-h-[42px]">
+              {activeBreaks.map(qty => (
+                <span key={qty} className="flex items-center gap-1 bg-slate-100 text-slate-700 text-xs font-medium px-2 py-1 rounded-lg">
+                  {qty}
+                  <button onClick={() => removeBreak(qty)} className="text-slate-400 hover:text-slate-700">
+                    <X size={10}/>
+                  </button>
+                </span>
+              ))}
+              <div className="flex items-center gap-1">
+                <input type="number" value={newBreakQty} onChange={e => setNewBreakQty(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addBreak()}
+                  placeholder="add..."
+                  className="w-16 text-xs border-0 focus:outline-none bg-transparent text-gray-500" />
+                <button onClick={addBreak} className="text-slate-400 hover:text-slate-700"><Plus size={12}/></button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -233,8 +187,7 @@ export default function CalculatorPage() {
           <p className="text-xs font-medium text-gray-600 mb-2">{T('select_techniques')}</p>
           <div className="flex flex-wrap gap-2">
             {techniques.map(tech => (
-              <button key={tech.id}
-                onClick={() => toggleTech(tech.id)}
+              <button key={tech.id} onClick={() => toggleTech(tech.id)}
                 className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-all border ${
                   selectedTechIds.includes(tech.id)
                     ? 'bg-slate-900 text-white border-slate-900'
@@ -247,111 +200,71 @@ export default function CalculatorPage() {
         </div>
       </div>
 
-      {/* Resultado en tiempo real */}
-      {result && (
-        <div className="space-y-4">
-          {/* Landed */}
-          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-900">Costo Landed</h2>
-              <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-lg font-mono">
-                {fmt(result.landedUnit)} / unidad
-              </span>
-            </div>
-            <div className="px-6 py-4 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">FOB unitario</span>
-                <span className="font-mono text-gray-700">{fmt(result.fob)}</span>
-              </div>
-              {product?.product_costs?.map(pc => (
-                <div key={pc.id} className="flex justify-between text-sm">
-                  <span className="text-gray-500">{pc.cost_items?.name}</span>
-                  <span className="font-mono text-gray-700">{fmt(pc.quantity * pc.cost_items?.value_per_unit)}</span>
-                </div>
-              ))}
-              <div className="flex justify-between text-sm font-semibold pt-2 border-t border-gray-100">
-                <span className="text-gray-900">Total landed</span>
-                <span className="font-mono text-gray-900">{fmt(result.landedUnit)}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Técnicas */}
-          {result.techniques.map(tech => (
-            <div key={tech.id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-gray-900">{tech.name}</h2>
-                <span className="text-xs bg-amber-50 text-amber-700 px-2 py-1 rounded-lg font-mono">
-                  {fmt(tech.total)} / unidad
-                </span>
-              </div>
-              <div className="px-6 py-4 space-y-3">
-                {/* Origination */}
-                <div>
-                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Origination</p>
-                  {tech.origCosts.map((tc, i) => (
-                    <div key={i} className="flex justify-between text-sm">
-                      <span className="text-gray-500">{tc.cost_items?.name} ({tc.quantity} {tc.cost_items?.unit})</span>
-                      <span className="font-mono text-gray-600">{fmt(tc.quantity * tc.cost_items?.value_per_unit)}</span>
-                    </div>
-                  ))}
-                  <div className="flex justify-between text-sm text-gray-600 mt-1">
-                    <span>Total origination ÷ {parseFloat(quantity)} unidades</span>
-                    <span className="font-mono">{fmt(tech.origUnit)}</span>
-                  </div>
-                </div>
-                {/* HIT */}
-                <div>
-                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Hit</p>
-                  {tech.hitCosts.map((tc, i) => (
-                    <div key={i} className="flex justify-between text-sm">
-                      <span className="text-gray-500">{tc.cost_items?.name} ({tc.quantity} {tc.cost_items?.unit})</span>
-                      <span className="font-mono text-gray-600">{fmt(tc.quantity * tc.cost_items?.value_per_unit)}</span>
-                    </div>
-                  ))}
-                  <div className="flex justify-between text-sm text-gray-600 mt-1">
-                    <span>Total HIT unitario</span>
-                    <span className="font-mono">{fmt(tech.hitUnit)}</span>
-                  </div>
-                </div>
-                <div className="flex justify-between text-sm font-semibold pt-2 border-t border-gray-100">
-                  <span>Total {tech.name}</span>
-                  <span className="font-mono">{fmt(tech.total)}</span>
-                </div>
-              </div>
-            </div>
-          ))}
-
-          {/* Total final */}
-          <div className="bg-slate-900 rounded-2xl p-6 flex items-center justify-between">
+      {/* Tabla qty breaks */}
+      {product && rows.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-5">
+          <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
             <div>
-              <p className="text-slate-400 text-xs uppercase tracking-wider">{T('result_grand_total')}</p>
-              <p className="text-xs text-slate-500 mt-0.5">{parseFloat(quantity)} unidades · {selectedTechIds.length} técnica(s)</p>
+              <h2 className="text-sm font-semibold text-gray-900">{product.name} <span className="text-gray-400 font-normal text-xs ml-1">{product.sku}</span></h2>
+              <p className="text-xs text-gray-400 mt-0.5">Margin applied automatically by quantity tier</p>
             </div>
-            <span className="text-2xl font-semibold text-white font-mono">{fmt(result.grandTotal)}</span>
+            <div className="flex gap-2">
+              <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">
+                <FileSpreadsheet size={13}/> Excel
+              </button>
+              <button onClick={exportPDF} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">
+                <FileText size={13}/> PDF
+              </button>
+            </div>
           </div>
 
-          {/* Export */}
-          <div className="flex gap-3 pt-2">
-            <Btn variant="secondary" onClick={exportExcel}>
-              <FileSpreadsheet size={15}/>{T('export_excel')}
-            </Btn>
-            <Btn variant="secondary" onClick={exportPDF}>
-              <FileText size={15}/>{T('export_pdf')}
-            </Btn>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 text-xs text-gray-400 font-medium uppercase tracking-wider">
+                  <th className="text-right px-5 py-3">Qty</th>
+                  <th className="text-right px-4 py-3">Landed</th>
+                  {selTechs.map(t => (
+                    <th key={t.id} className="text-right px-4 py-3">{t.name}</th>
+                  ))}
+                  <th className="text-right px-4 py-3">Cost unit</th>
+                  <th className="text-right px-4 py-3">Margin</th>
+                  <th className="text-right px-5 py-3 text-slate-900">Sell price</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => (
+                  <tr key={r.qty} className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${i === rows.length - 1 ? 'border-0' : ''}`}>
+                    <td className="text-right px-5 py-3 font-semibold text-gray-900">{r.qty.toLocaleString()}</td>
+                    <td className="text-right px-4 py-3 font-mono text-gray-500 text-xs">{fmt(r.landedUnit)}</td>
+                    {r.techs.map(t => (
+                      <td key={t.id} className="text-right px-4 py-3 font-mono text-gray-500 text-xs">{fmt(t.total)}</td>
+                    ))}
+                    <td className="text-right px-4 py-3 font-mono text-gray-700 text-xs">{fmt(r.costUnit)}</td>
+                    <td className="text-right px-4 py-3">
+                      <span className="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-lg font-medium">{r.marginPct}%</span>
+                    </td>
+                    <td className="text-right px-5 py-3 font-mono font-semibold text-slate-900">{fmt(r.sellPrice)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Margin tiers legend */}
+          <div className="px-6 py-3 border-t border-gray-50 flex flex-wrap gap-3">
+            {tiers.map(t => (
+              <span key={t.id} className="text-xs text-gray-400">
+                {t.qty_from.toLocaleString()}–{t.qty_to ? t.qty_to.toLocaleString() : '∞'} units → <span className="font-medium text-gray-600">{t.margin_pct}% margin</span>
+              </span>
+            ))}
           </div>
         </div>
       )}
 
-      {!result && productId && parseFloat(quantity) > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-sm text-gray-400">
-          Seleccioná al menos un producto con cantidad para ver el cálculo
-        </div>
-      )}
-
-      {!productId && (
+      {!product && (
         <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-12 text-center text-sm text-gray-400">
-          Seleccioná un producto y una cantidad para comenzar
+          Select a product to see qty breaks and pricing
         </div>
       )}
     </div>
