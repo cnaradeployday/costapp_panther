@@ -10,7 +10,7 @@ import {
   CategoryBadge, EmptyState, PageHeader, SearchInput, Toggle
 } from '../components/ui'
 
-const PRESETS = ['tampografia', 'serigrafia', 'bordado', 'laser', 'dtf', 'sublimacion', 'uv', 'otro']
+const PRESETS = ['pad_printing', 'screen_printing', 'embroidery', 'laser', 'dtf', 'sublimation', 'uv_printing', 'other']
 const empty = { name: '', base_preset: '', active: true }
 
 export default function TechniquesPage() {
@@ -27,23 +27,41 @@ export default function TechniquesPage() {
   const [confirm, setConfirm] = useState(null)
   const [confirmTc, setConfirmTc] = useState(null)
   const [toast, setToast] = useState(null)
-  // sub-form para agregar costo a técnica
   const [tcForm, setTcForm] = useState({ cost_item_id: '', quantity: '1', category: 'ORIGINATION' })
   const [addingTc, setAddingTc] = useState(null)
 
   async function load() {
     setLoading(true)
     try {
-      const [tech, costs] = await Promise.all([getPrintTechniques(), getCostItems()])
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 10000)
+      )
+      const [tech, costs] = await Promise.race([
+        Promise.all([getPrintTechniques(), getCostItems()]),
+        timeoutPromise
+      ])
       setTechniques(tech)
       setAllCosts(costs.filter(c => c.category !== 'LANDED' && c.active))
-    } finally { setLoading(false) }
+    } catch (e) {
+      console.error('Techniques load error:', e)
+      if (e.message === 'timeout') {
+        setToast({ message: 'Loading timeout — please reload the page', type: 'error' })
+      } else {
+        setToast({ message: T('error'), type: 'error' })
+      }
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { load() }, [])
 
   function openNew() { setEditing(null); setForm(empty); setModal(true) }
-  function openEdit(t) { setEditing(t); setForm({ name: t.name, base_preset: t.base_preset ?? '', active: t.active }); setModal(true) }
+  function openEdit(t) {
+    setEditing(t)
+    setForm({ name: t.name, base_preset: t.base_preset ?? '', active: t.active })
+    setModal(true)
+  }
 
   async function handleSave() {
     setSaving(true)
@@ -103,7 +121,12 @@ export default function TechniquesPage() {
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-gray-400 text-sm">{T('loading')}</div>
+        <div className="text-center py-12 text-gray-400 text-sm">
+          <div>{T('loading')}</div>
+          <button onClick={load} className="mt-4 text-xs text-slate-500 underline hover:text-slate-700">
+            Taking too long? Click to retry
+          </button>
+        </div>
       ) : filtered.length === 0 ? (
         <EmptyState message={T('noResults')} />
       ) : (
@@ -112,7 +135,6 @@ export default function TechniquesPage() {
             const isOpen = expanded === tech.id
             return (
               <div key={tech.id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-                {/* Header de la técnica */}
                 <div className="flex items-center gap-3 px-5 py-4">
                   <button onClick={() => setExpanded(isOpen ? null : tech.id)}
                     className="text-gray-400 hover:text-gray-700 transition-colors">
@@ -125,7 +147,7 @@ export default function TechniquesPage() {
                     )}
                   </div>
                   <span className={`w-2 h-2 rounded-full ${tech.active ? 'bg-emerald-400' : 'bg-gray-300'}`} />
-                  <span className="text-xs text-gray-400">{tech.technique_costs?.length ?? 0} costos</span>
+                  <span className="text-xs text-gray-400">{tech.technique_costs?.length ?? 0} costs</span>
                   <button onClick={() => openEdit(tech)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700">
                     <Pencil size={14}/>
                   </button>
@@ -134,7 +156,6 @@ export default function TechniquesPage() {
                   </button>
                 </div>
 
-                {/* Costos de la técnica */}
                 {isOpen && (
                   <div className="border-t border-gray-50 px-5 py-4">
                     <div className="flex items-center justify-between mb-3">
@@ -144,13 +165,12 @@ export default function TechniquesPage() {
                       </Btn>
                     </div>
 
-                    {/* Formulario agregar costo */}
                     {addingTc === tech.id && (
                       <div className="bg-gray-50 rounded-xl p-4 mb-3 flex flex-wrap gap-3 items-end">
-                        <Select label={T('cost_name')} value={tcForm.cost_item_id}
+                        <Select label="Cost item" value={tcForm.cost_item_id}
                           onChange={e => setTcForm(f => ({ ...f, cost_item_id: e.target.value }))}
                           className="flex-1 min-w-40">
-                          <option value="">— seleccionar —</option>
+                          <option value="">— select —</option>
                           {allCosts.map(c => <option key={c.id} value={c.id}>{c.name} ({c.unit})</option>)}
                         </Select>
                         <Input label={T('quantity')} type="number" step="0.0001" min="0"
@@ -170,9 +190,8 @@ export default function TechniquesPage() {
                       </div>
                     )}
 
-                    {/* Lista de costos */}
                     {tech.technique_costs?.length === 0 ? (
-                      <p className="text-sm text-gray-400 py-2">Sin costos configurados</p>
+                      <p className="text-sm text-gray-400 py-2">No costs configured</p>
                     ) : (
                       <div className="space-y-1.5">
                         {tech.technique_costs?.map(tc => (
@@ -180,7 +199,9 @@ export default function TechniquesPage() {
                             <CategoryBadge category={tc.category} />
                             <span className="flex-1 text-sm text-gray-700">{tc.cost_items?.name}</span>
                             <span className="text-xs text-gray-400">{tc.quantity} {tc.cost_items?.unit}</span>
-                            <span className="text-xs font-mono text-gray-500">{fmt(tc.quantity * tc.cost_items?.value_per_unit)}</span>
+                            <span className="text-xs font-mono text-gray-500">
+                              {fmt(tc.quantity * (tc.cost_items?.value_per_unit ?? 0))}
+                            </span>
                             <button onClick={() => setConfirmTc(tc.id)}
                               className="p-1 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-400">
                               <Trash2 size={12}/>
@@ -197,7 +218,6 @@ export default function TechniquesPage() {
         </div>
       )}
 
-      {/* Modal técnica */}
       <Modal open={modal} onClose={() => setModal(false)}
         title={editing ? T('edit_technique') : T('new_technique')} width="max-w-md">
         <div className="space-y-4">
@@ -205,7 +225,7 @@ export default function TechniquesPage() {
             onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
           <Select label={T('preset')} value={form.base_preset}
             onChange={e => setForm(f => ({ ...f, base_preset: e.target.value }))}>
-            <option value="">— ninguno —</option>
+            <option value="">— none —</option>
             {PRESETS.map(p => <option key={p} value={p}>{p}</option>)}
           </Select>
           <div className="flex items-center gap-3">
