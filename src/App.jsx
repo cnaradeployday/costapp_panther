@@ -7,6 +7,7 @@ import TechniquesPage from './pages/Techniques'
 import ProductsPage from './pages/Products'
 import CalculatorPage from './pages/Calculator'
 import MarginsPage from './pages/Margins'
+import UnitsPage from './pages/UnitsOfMeasure'
 import { ConfigPage, UsersPage } from './pages/Config'
 
 function ProtectedRoute({ children, requireAdmin, requireSuperAdmin }) {
@@ -36,6 +37,7 @@ function AppRoutes() {
       <Route path="/costs" element={<ProtectedRoute requireAdmin><Layout><CostsPage /></Layout></ProtectedRoute>} />
       <Route path="/techniques" element={<ProtectedRoute requireAdmin><Layout><TechniquesPage /></Layout></ProtectedRoute>} />
       <Route path="/products" element={<ProtectedRoute requireAdmin><Layout><ProductsPage /></Layout></ProtectedRoute>} />
+      <Route path="/units" element={<ProtectedRoute requireAdmin><Layout><UnitsPage /></Layout></ProtectedRoute>} />
       <Route path="/margins" element={<ProtectedRoute requireAdmin><Layout><MarginsPage /></Layout></ProtectedRoute>} />
       <Route path="/users" element={<ProtectedRoute requireSuperAdmin><Layout><UsersPage /></Layout></ProtectedRoute>} />
       <Route path="/config" element={<ProtectedRoute requireSuperAdmin><Layout><ConfigPage /></Layout></ProtectedRoute>} />
