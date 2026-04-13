@@ -7,35 +7,56 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw new Error('Faltan las variables de entorno VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY')
 }
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false,
-    // FIX: Evita el lock conflict que congela las queries al volver de pestaña inactiva.
-    // El lock de la Web Locks API queda huérfano cuando el componente se desmonta
-    // (especialmente en React Strict Mode), bloqueando todas las requests de auth.
-    storageKey: 'costapp-auth-token',
-    lock: async (_name, _acquireTimeout, fn) => fn()
+function createSupabaseClient() {
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+      storageKey: 'costapp-auth-token',
+      lock: async (_name, _acquireTimeout, fn) => fn()
+    }
+  })
+}
+
+// Cliente singleton — se recrea si la pestaña vuelve de inactividad
+let _client = createSupabaseClient()
+
+export function getSupabaseClient() {
+  return _client
+}
+
+// Al volver a la pestaña, recrear el cliente para evitar estado corrupto
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      _client = createSupabaseClient()
+    }
+  })
+}
+
+export const supabase = new Proxy({}, {
+  get(_, prop) {
+    return _client[prop]
   }
 })
 
 // ── Auth helpers ──────────────────────────────────────────────
 export async function signIn(email, password) {
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+  const { data, error } = await _client.auth.signInWithPassword({ email, password })
   if (error) throw error
   return data
 }
 
 export async function signOut() {
-  const { error } = await supabase.auth.signOut()
+  const { error } = await _client.auth.signOut()
   if (error) throw error
 }
 
 export async function getCurrentProfile() {
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { user } } = await _client.auth.getUser()
   if (!user) return null
-  const { data, error } = await supabase
+  const { data, error } = await _client
     .from('user_profiles')
     .select('*')
     .eq('id', user.id)
@@ -46,13 +67,13 @@ export async function getCurrentProfile() {
 
 // ── Config de instancia ───────────────────────────────────────
 export async function getInstanceConfig() {
-  const { data, error } = await supabase.from('instance_config').select('*').single()
+  const { data, error } = await _client.from('instance_config').select('*').single()
   if (error) throw error
   return data
 }
 
 export async function updateInstanceConfig(updates) {
-  const { data, error } = await supabase
+  const { data, error } = await _client
     .from('instance_config')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', (await getInstanceConfig()).id)
@@ -63,7 +84,7 @@ export async function updateInstanceConfig(updates) {
 
 // ── Cost items ────────────────────────────────────────────────
 export async function getCostItems(category = null) {
-  let q = supabase.from('cost_items').select('*').order('name')
+  let q = _client.from('cost_items').select('*').order('name')
   if (category) q = q.eq('category', category)
   const { data, error } = await q
   if (error) throw error
@@ -71,7 +92,7 @@ export async function getCostItems(category = null) {
 }
 
 export async function upsertCostItem(item) {
-  const { data, error } = await supabase
+  const { data, error } = await _client
     .from('cost_items')
     .upsert({ ...item, updated_at: new Date().toISOString() })
     .select().single()
@@ -80,13 +101,13 @@ export async function upsertCostItem(item) {
 }
 
 export async function deleteCostItem(id) {
-  const { error } = await supabase.from('cost_items').delete().eq('id', id)
+  const { error } = await _client.from('cost_items').delete().eq('id', id)
   if (error) throw error
 }
 
 // ── Técnicas de impresión ─────────────────────────────────────
 export async function getPrintTechniques() {
-  const { data, error } = await supabase
+  const { data, error } = await _client
     .from('print_techniques')
     .select(`*, technique_costs(*, cost_items(*))`)
     .order('name')
@@ -95,7 +116,7 @@ export async function getPrintTechniques() {
 }
 
 export async function upsertPrintTechnique(technique) {
-  const { data, error } = await supabase
+  const { data, error } = await _client
     .from('print_techniques')
     .upsert({ ...technique, updated_at: new Date().toISOString() })
     .select().single()
@@ -104,24 +125,24 @@ export async function upsertPrintTechnique(technique) {
 }
 
 export async function deletePrintTechnique(id) {
-  const { error } = await supabase.from('print_techniques').delete().eq('id', id)
+  const { error } = await _client.from('print_techniques').delete().eq('id', id)
   if (error) throw error
 }
 
 export async function upsertTechniqueCost(tc) {
-  const { data, error } = await supabase.from('technique_costs').upsert(tc).select().single()
+  const { data, error } = await _client.from('technique_costs').upsert(tc).select().single()
   if (error) throw error
   return data
 }
 
 export async function deleteTechniqueCost(id) {
-  const { error } = await supabase.from('technique_costs').delete().eq('id', id)
+  const { error } = await _client.from('technique_costs').delete().eq('id', id)
   if (error) throw error
 }
 
 // ── Productos ─────────────────────────────────────────────────
 export async function getProducts() {
-  const { data, error } = await supabase
+  const { data, error } = await _client
     .from('products')
     .select(`*, product_costs(*, cost_items(*))`)
     .order('name')
@@ -130,7 +151,7 @@ export async function getProducts() {
 }
 
 export async function upsertProduct(product) {
-  const { data, error } = await supabase
+  const { data, error } = await _client
     .from('products')
     .upsert({ ...product, updated_at: new Date().toISOString() })
     .select().single()
@@ -139,36 +160,36 @@ export async function upsertProduct(product) {
 }
 
 export async function deleteProduct(id) {
-  const { error } = await supabase.from('products').delete().eq('id', id)
+  const { error } = await _client.from('products').delete().eq('id', id)
   if (error) throw error
 }
 
 export async function upsertProductCost(pc) {
-  const { data, error } = await supabase.from('product_costs').upsert(pc).select().single()
+  const { data, error } = await _client.from('product_costs').upsert(pc).select().single()
   if (error) throw error
   return data
 }
 
 export async function deleteProductCost(id) {
-  const { error } = await supabase.from('product_costs').delete().eq('id', id)
+  const { error } = await _client.from('product_costs').delete().eq('id', id)
   if (error) throw error
 }
 
 // ── Usuarios (superadmin) ─────────────────────────────────────
 export async function getUsers() {
-  const { data, error } = await supabase.from('user_profiles').select('*').order('email')
+  const { data, error } = await _client.from('user_profiles').select('*').order('email')
   if (error) throw error
   return data
 }
 
 export async function updateUserRole(userId, role) {
-  const { error } = await supabase.from('user_profiles').update({ role }).eq('id', userId)
+  const { error } = await _client.from('user_profiles').update({ role }).eq('id', userId)
   if (error) throw error
 }
 
 // ── Margin tiers ──────────────────────────────────────────────
 export async function getMarginTiers() {
-  const { data, error } = await supabase
+  const { data, error } = await _client
     .from('margin_tiers')
     .select('*')
     .order('qty_from')
@@ -177,7 +198,7 @@ export async function getMarginTiers() {
 }
 
 export async function upsertMarginTier(tier) {
-  const { data, error } = await supabase
+  const { data, error } = await _client
     .from('margin_tiers')
     .upsert(tier)
     .select().single()
@@ -186,13 +207,13 @@ export async function upsertMarginTier(tier) {
 }
 
 export async function deleteMarginTier(id) {
-  const { error } = await supabase.from('margin_tiers').delete().eq('id', id)
+  const { error } = await _client.from('margin_tiers').delete().eq('id', id)
   if (error) throw error
 }
 
 // ── Qty breaks ────────────────────────────────────────────────
 export async function getQtyBreaks() {
-  const { data, error } = await supabase
+  const { data, error } = await _client
     .from('qty_breaks')
     .select('*')
     .order('sort_order')
@@ -201,7 +222,7 @@ export async function getQtyBreaks() {
 }
 
 export async function upsertQtyBreak(brk) {
-  const { data, error } = await supabase
+  const { data, error } = await _client
     .from('qty_breaks')
     .upsert(brk)
     .select().single()
@@ -210,6 +231,6 @@ export async function upsertQtyBreak(brk) {
 }
 
 export async function deleteQtyBreak(id) {
-  const { error } = await supabase.from('qty_breaks').delete().eq('id', id)
+  const { error } = await _client.from('qty_breaks').delete().eq('id', id)
   if (error) throw error
 }
