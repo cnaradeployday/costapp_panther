@@ -31,7 +31,12 @@ export default function UnitsPage() {
     try { setUnits(await getUnits()) } finally { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    const onVisible = () => { if (document.visibilityState === 'visible') load() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [])
 
   async function handleAdd() {
     if (!form.name.trim()) return

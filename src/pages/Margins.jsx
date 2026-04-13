@@ -29,7 +29,12 @@ export default function MarginsPage() {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    const onVisible = () => { if (document.visibilityState === 'visible') load() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [])
 
   async function handleAddTier() {
     if (!tierForm.qty_from || !tierForm.margin_pct) return

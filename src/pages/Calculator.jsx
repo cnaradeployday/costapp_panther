@@ -64,19 +64,24 @@ export default function CalculatorPage() {
   const [activeBreaks, setActiveBreaks] = useState([])
   const [newBreakQty, setNewBreakQty] = useState('')
 
+  async function load() {
+    setLoading(true)
+    try {
+      const [prods, techs, trs, brks] = await Promise.all([
+        getProducts(), getPrintTechniques(), getMarginTiers(), getQtyBreaks()
+      ])
+      setProducts(prods.filter(p => p.active))
+      setTechniques(techs.filter(t => t.active))
+      setTiers(trs)
+      setActiveBreaks(brks.map(b => b.quantity))
+    } finally { setLoading(false) }
+  }
+
   useEffect(() => {
-    async function load() {
-      try {
-        const [prods, techs, trs, brks] = await Promise.all([
-          getProducts(), getPrintTechniques(), getMarginTiers(), getQtyBreaks()
-        ])
-        setProducts(prods.filter(p => p.active))
-        setTechniques(techs.filter(t => t.active))
-        setTiers(trs)
-        setActiveBreaks(brks.map(b => b.quantity))
-      } finally { setLoading(false) }
-    }
     load()
+    const onVisible = () => { if (document.visibilityState === 'visible') load() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
 
   function toggleTech(id) {

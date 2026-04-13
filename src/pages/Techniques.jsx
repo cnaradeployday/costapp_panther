@@ -33,28 +33,23 @@ export default function TechniquesPage() {
   async function load() {
     setLoading(true)
     try {
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('timeout')), 10000)
-      )
-      const [tech, costs] = await Promise.race([
-        Promise.all([getPrintTechniques(), getCostItems()]),
-        timeoutPromise
-      ])
+      const [tech, costs] = await Promise.all([getPrintTechniques(), getCostItems()])
       setTechniques(tech)
       setAllCosts(costs.filter(c => c.category !== 'LANDED' && c.active))
     } catch (e) {
       console.error('Techniques load error:', e)
-      if (e.message === 'timeout') {
-        setToast({ message: 'Loading timeout — please reload the page', type: 'error' })
-      } else {
-        setToast({ message: T('error'), type: 'error' })
-      }
+      setToast({ message: T('error'), type: 'error' })
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    const onVisible = () => { if (document.visibilityState === 'visible') load() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [])
 
   function openNew() { setEditing(null); setForm(empty); setModal(true) }
   function openEdit(t) {
