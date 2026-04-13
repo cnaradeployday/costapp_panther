@@ -11,7 +11,12 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false
+    detectSessionInUrl: false,
+    // FIX: Evita el lock conflict que congela las queries al volver de pestaña inactiva.
+    // El lock de la Web Locks API queda huérfano cuando el componente se desmonta
+    // (especialmente en React Strict Mode), bloqueando todas las requests de auth.
+    storageKey: 'costapp-auth-token',
+    lock: async (_name, _acquireTimeout, fn) => fn()
   }
 })
 
