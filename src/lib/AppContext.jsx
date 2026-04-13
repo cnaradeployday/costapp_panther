@@ -69,23 +69,24 @@ export function AppProvider({ children }) {
     }
     init()
 
+    // FIX: Se maneja loading correctamente en cada evento de auth
+    // y se eliminó el beforeunload que causaba signOut al minimizar/cambiar pestaña
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        setUser(session.user)
-        await loadProfile(session.user)
-      } else {
+      if (event === 'SIGNED_OUT') {
         setUser(null)
         setProfile(null)
+        setLoading(false)
+      } else if (session?.user) {
+        setLoading(true)
+        setUser(session.user)
+        await loadProfile(session.user)
+        setLoading(false)
       }
     })
-
-    const handleUnload = () => { supabase.auth.signOut() }
-    window.addEventListener('beforeunload', handleUnload)
 
     return () => {
       clearTimeout(timeout)
       subscription.unsubscribe()
-      window.removeEventListener('beforeunload', handleUnload)
     }
   }, [])
 
