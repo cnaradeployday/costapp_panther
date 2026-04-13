@@ -8,7 +8,7 @@ import { useApp } from '../lib/AppContext'
 import { Btn, Input, Toast, PageHeader, Confirm } from '../components/ui'
 
 export default function MarginsPage() {
-  const { currency } = useApp()
+  const { currency, tabVisible } = useApp()
   const [tiers, setTiers] = useState([])
   const [breaks, setBreaks] = useState([])
   const [loading, setLoading] = useState(true)
@@ -29,12 +29,7 @@ export default function MarginsPage() {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => {
-    load()
-    const onVisible = () => { if (document.visibilityState === 'visible') load() }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [])
+  useEffect(() => { load() }, [tabVisible])
 
   async function handleAddTier() {
     if (!tierForm.qty_from || !tierForm.margin_pct) return

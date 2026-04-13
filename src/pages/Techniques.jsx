@@ -14,7 +14,7 @@ const PRESETS = ['pad_printing', 'screen_printing', 'embroidery', 'laser', 'dtf'
 const empty = { name: '', base_preset: '', active: true }
 
 export default function TechniquesPage() {
-  const { T, fmt } = useApp()
+  const { T, fmt, tabVisible } = useApp()
   const [techniques, setTechniques] = useState([])
   const [allCosts, setAllCosts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -44,12 +44,7 @@ export default function TechniquesPage() {
     }
   }
 
-  useEffect(() => {
-    load()
-    const onVisible = () => { if (document.visibilityState === 'visible') load() }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [])
+  useEffect(() => { load() }, [tabVisible])
 
   function openNew() { setEditing(null); setForm(empty); setModal(true) }
   function openEdit(t) {

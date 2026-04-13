@@ -54,7 +54,7 @@ function calcPrintUnit(tech, qty) {
 }
 
 export default function CalculatorPage() {
-  const { T, fmt, config } = useApp()
+  const { T, fmt, config, tabVisible } = useApp()
   const [products, setProducts] = useState([])
   const [techniques, setTechniques] = useState([])
   const [tiers, setTiers] = useState([])
@@ -77,12 +77,7 @@ export default function CalculatorPage() {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => {
-    load()
-    const onVisible = () => { if (document.visibilityState === 'visible') load() }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [])
+  useEffect(() => { load() }, [tabVisible])
 
   function toggleTech(id) {
     setSelectedTechIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])

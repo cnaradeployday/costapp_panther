@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react'
 import { supabase } from './supabase'
 import { t as translate } from '../i18n'
 
@@ -9,6 +9,7 @@ export function AppProvider({ children }) {
   const [profile, setProfile] = useState(null)
   const [config, setConfig] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [tabVisible, setTabVisible] = useState(true)
   const initialized = useRef(false)
 
   async function loadConfig() {
@@ -50,7 +51,6 @@ export function AppProvider({ children }) {
   }
 
   useEffect(() => {
-    // Timeout de seguridad — si algo falla, no quedarse cargando para siempre
     const timeout = setTimeout(() => {
       initialized.current = true
       setLoading(false)
@@ -74,13 +74,8 @@ export function AppProvider({ children }) {
     }
     init()
 
-    // FIX: Se ignora INITIAL_SESSION porque ya lo maneja init() arriba.
-    // Esto evita la race condition que dejaba loading = true para siempre.
-    // También se eliminó el beforeunload que hacía signOut al minimizar/cambiar pestaña.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      // Ignorar el evento inicial — init() ya lo procesó
       if (!initialized.current) return
-
       if (event === 'SIGNED_OUT') {
         setUser(null)
         setProfile(null)
@@ -94,9 +89,16 @@ export function AppProvider({ children }) {
       }
     })
 
+    // Listener global de visibilidad — en AppContext para que nunca se desmonte
+    const handleVisibility = () => {
+      setTabVisible(document.visibilityState === 'visible')
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
     return () => {
       clearTimeout(timeout)
       subscription.unsubscribe()
+      document.removeEventListener('visibilitychange', handleVisibility)
     }
   }, [])
 
@@ -107,7 +109,7 @@ export function AppProvider({ children }) {
   const refreshConfig = async () => await loadConfig()
 
   return (
-    <AppContext.Provider value={{ user, profile, config, loading, lang, currency, T, fmt, refreshConfig }}>
+    <AppContext.Provider value={{ user, profile, config, loading, lang, currency, T, fmt, refreshConfig, tabVisible }}>
       {children}
     </AppContext.Provider>
   )

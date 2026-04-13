@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useApp } from '../lib/AppContext'
 import { Btn, Input, Toast, PageHeader, Confirm } from '../components/ui'
 
 async function getUnits() {
@@ -19,6 +20,7 @@ async function deleteUnit(id) {
 }
 
 export default function UnitsPage() {
+  const { tabVisible } = useApp()
   const [units, setUnits] = useState([])
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState({ name: '', type: 'nominal' })
@@ -31,12 +33,7 @@ export default function UnitsPage() {
     try { setUnits(await getUnits()) } finally { setLoading(false) }
   }
 
-  useEffect(() => {
-    load()
-    const onVisible = () => { if (document.visibilityState === 'visible') load() }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [])
+  useEffect(() => { load() }, [tabVisible])
 
   async function handleAdd() {
     if (!form.name.trim()) return

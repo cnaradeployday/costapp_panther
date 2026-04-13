@@ -9,7 +9,7 @@ const CATEGORIES = ['LANDED', 'ORIGINATION', 'HIT']
 const empty = { name: '', unit: '', category: 'LANDED', value_per_unit: '', value_type: 'nominal', active: true }
 
 export default function CostsPage() {
-  const { T, fmt } = useApp()
+  const { T, fmt, tabVisible } = useApp()
   const [items, setItems] = useState([])
   const [units, setUnits] = useState([])
   const [loading, setLoading] = useState(true)
@@ -34,12 +34,7 @@ export default function CostsPage() {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => {
-    load()
-    const onVisible = () => { if (document.visibilityState === 'visible') load() }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [])
+  useEffect(() => { load() }, [tabVisible])
 
   function openNew() { setEditing(null); setForm(empty); setModal(true) }
   function openEdit(item) {

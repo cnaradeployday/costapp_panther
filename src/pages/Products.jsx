@@ -10,7 +10,7 @@ import { Modal, Confirm, Toast, Btn, Input, Select, EmptyState, PageHeader, Sear
 const empty = { sku: '', name: '', ncm: '', origin_country: '', fob_price: '', active: true }
 
 export default function ProductsPage() {
-  const { T, fmt } = useApp()
+  const { T, fmt, tabVisible } = useApp()
   const [products, setProducts] = useState([])
   const [landedCosts, setLandedCosts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -35,12 +35,7 @@ export default function ProductsPage() {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => {
-    load()
-    const onVisible = () => { if (document.visibilityState === 'visible') load() }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [])
+  useEffect(() => { load() }, [tabVisible])
 
   function openNew() { setEditing(null); setForm(empty); setModal(true) }
   function openEdit(p) {
