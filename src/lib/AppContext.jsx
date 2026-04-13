@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { supabase } from './supabase'
 import { t as translate } from '../i18n'
 
@@ -9,6 +9,7 @@ export function AppProvider({ children }) {
   const [profile, setProfile] = useState(null)
   const [config, setConfig] = useState(null)
   const [loading, setLoading] = useState(true)
+  const initialized = useRef(false)
 
   async function loadConfig() {
     try {
@@ -50,7 +51,10 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     // Timeout de seguridad — si algo falla, no quedarse cargando para siempre
-    const timeout = setTimeout(() => setLoading(false), 5000)
+    const timeout = setTimeout(() => {
+      initialized.current = true
+      setLoading(false)
+    }, 8000)
 
     async function init() {
       try {
@@ -64,23 +68,29 @@ export function AppProvider({ children }) {
         console.error('init error:', e)
       } finally {
         clearTimeout(timeout)
+        initialized.current = true
         setLoading(false)
       }
     }
     init()
 
-    // FIX: Se maneja loading correctamente en cada evento de auth
-    // y se eliminó el beforeunload que causaba signOut al minimizar/cambiar pestaña
+    // FIX: Se ignora INITIAL_SESSION porque ya lo maneja init() arriba.
+    // Esto evita la race condition que dejaba loading = true para siempre.
+    // También se eliminó el beforeunload que hacía signOut al minimizar/cambiar pestaña.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // Ignorar el evento inicial — init() ya lo procesó
+      if (!initialized.current) return
+
       if (event === 'SIGNED_OUT') {
         setUser(null)
         setProfile(null)
         setLoading(false)
-      } else if (session?.user) {
-        setLoading(true)
-        setUser(session.user)
-        await loadProfile(session.user)
-        setLoading(false)
+      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        if (session?.user) {
+          setUser(session.user)
+          await loadProfile(session.user)
+          setLoading(false)
+        }
       }
     })
 
