@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Calculator, Tag, Printer, Package, Users, Settings, LogOut, Menu, Percent, Ruler } from 'lucide-react'
+import { Calculator, Tag, Printer, Package, Users, Settings, LogOut, Menu, Percent, Ruler, Ship, Truck, Landmark, TrendingUp } from 'lucide-react'
 import { useState } from 'react'
 import { useApp } from '../lib/AppContext'
 import { signOut } from '../lib/supabase'
@@ -18,7 +18,11 @@ export default function Layout({ children }) {
   const navItems = [
     { to: '/', icon: Calculator, label: T('calculator') },
     ...(isAdmin ? [
-      { to: '/costs', icon: Tag, label: T('costs') },
+      { to: '/landed', icon: Ship, label: 'LANDED', section: true },
+      { to: '/landed/partners', icon: Truck, label: 'Logistics Partners' },
+      { to: '/landed/warehouses', icon: Landmark, label: 'Warehouses' },
+      { to: '/landed/rates', icon: TrendingUp, label: 'Exchange Rates' },
+      { to: '/costs', icon: Tag, label: T('costs'), section: true },
       { to: '/units', icon: Ruler, label: 'Units of measure' },
       { to: '/techniques', icon: Printer, label: T('techniques') },
       { to: '/products', icon: Package, label: T('products') },
@@ -47,16 +51,22 @@ export default function Layout({ children }) {
         </div>
       </div>
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {navItems.map(({ to, icon: Icon, label }) => (
-          <NavLink key={to} to={to} end={to === '/'}
-            onClick={() => setMobileOpen(false)}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                isActive ? 'bg-slate-900 text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-              }`}>
-            <Icon size={17} />
-            {label}
-          </NavLink>
+        {navItems.map(({ to, icon: Icon, label, section }) => (
+          section && to !== '/' ? (
+            <div key={to + '_section'}>
+              <p className="px-3 pt-4 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
+            </div>
+          ) : (
+            <NavLink key={to} to={to} end={to === '/'}
+              onClick={() => setMobileOpen(false)}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                  isActive ? 'bg-slate-900 text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}>
+              <Icon size={17} />
+              {label}
+            </NavLink>
+          )
         ))}
       </nav>
       <div className="px-3 py-4 border-t border-gray-100">

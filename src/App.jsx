@@ -9,6 +9,10 @@ import CalculatorPage from './pages/Calculator'
 import MarginsPage from './pages/Margins'
 import UnitsPage from './pages/UnitsOfMeasure'
 import { ConfigPage, UsersPage } from './pages/Config'
+import LandedCalculatorPage from './pages/LandedCalculator'
+import LogisticsPartnersPage from './pages/LogisticsPartners'
+import WarehousesPage from './pages/Warehouses'
+import ExchangeRatesPage from './pages/ExchangeRates'
 
 function ProtectedRoute({ children, requireAdmin, requireSuperAdmin }) {
   const { user, profile, loading } = useApp()
@@ -34,6 +38,10 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
       <Route path="/" element={<ProtectedRoute><Layout><CalculatorPage /></Layout></ProtectedRoute>} />
+      <Route path="/landed" element={<ProtectedRoute requireAdmin><Layout><LandedCalculatorPage /></Layout></ProtectedRoute>} />
+      <Route path="/landed/partners" element={<ProtectedRoute requireAdmin><Layout><LogisticsPartnersPage /></Layout></ProtectedRoute>} />
+      <Route path="/landed/warehouses" element={<ProtectedRoute requireAdmin><Layout><WarehousesPage /></Layout></ProtectedRoute>} />
+      <Route path="/landed/rates" element={<ProtectedRoute requireAdmin><Layout><ExchangeRatesPage /></Layout></ProtectedRoute>} />
       <Route path="/costs" element={<ProtectedRoute requireAdmin><Layout><CostsPage /></Layout></ProtectedRoute>} />
       <Route path="/techniques" element={<ProtectedRoute requireAdmin><Layout><TechniquesPage /></Layout></ProtectedRoute>} />
       <Route path="/products" element={<ProtectedRoute requireAdmin><Layout><ProductsPage /></Layout></ProtectedRoute>} />

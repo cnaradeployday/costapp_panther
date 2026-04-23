@@ -7,10 +7,10 @@ import {
 import { useApp } from '../lib/AppContext'
 import { Modal, Confirm, Toast, Btn, Input, Select, EmptyState, PageHeader, SearchInput, Toggle } from '../components/ui'
 
-const empty = { sku: '', name: '', ncm: '', origin_country: '', fob_price: '', active: true }
+const empty = { sku: '', name: '', ncm: '', origin_country: '', fob_price: '', weight_kg: '', length_cm: '', width_cm: '', height_cm: '', active: true }
 
 export default function ProductsPage() {
-  const { T, fmt, tabVisible } = useApp()
+  const { T, fmt } = useApp()
   const [products, setProducts] = useState([])
   const [landedCosts, setLandedCosts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -35,12 +35,12 @@ export default function ProductsPage() {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [tabVisible])
+  useEffect(() => { load() }, [])
 
   function openNew() { setEditing(null); setForm(empty); setModal(true) }
   function openEdit(p) {
     setEditing(p)
-    setForm({ sku: p.sku, name: p.name, ncm: p.ncm ?? '', origin_country: p.origin_country ?? '', fob_price: String(p.fob_price), active: p.active })
+    setForm({ sku: p.sku, name: p.name, ncm: p.ncm ?? '', origin_country: p.origin_country ?? '', fob_price: String(p.fob_price), weight_kg: p.weight_kg ? String(p.weight_kg) : '', length_cm: p.length_cm ? String(p.length_cm) : '', width_cm: p.width_cm ? String(p.width_cm) : '', height_cm: p.height_cm ? String(p.height_cm) : '', active: p.active })
     setModal(true)
   }
 
@@ -52,6 +52,10 @@ export default function ProductsPage() {
         sku: form.sku, name: form.name, ncm: form.ncm,
         origin_country: form.origin_country,
         fob_price: parseFloat(form.fob_price) || 0,
+        weight_kg: parseFloat(form.weight_kg) || 0,
+        length_cm: parseFloat(form.length_cm) || 0,
+        width_cm: parseFloat(form.width_cm) || 0,
+        height_cm: parseFloat(form.height_cm) || 0,
         active: form.active,
       })
       setModal(false)
