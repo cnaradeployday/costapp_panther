@@ -69,7 +69,7 @@ export async function deleteLogisticsPartner(id) {
 // ── Logistics routes ──────────────────────────────────────────
 export async function getLogisticsRoutes(partnerId = null) {
   const { supabase } = await import('./supabase')
-  let q = supabase.from('logistics_routes').select('*, logistics_partners(*), logistics_price_tiers(*), logistics_ancillary_costs(*)').order('origin_country')
+  let q = supabase.from('logistics_routes').select('*, logistics_partners(*), logistics_price_tiers(*)').order('origin_country')
   if (partnerId) q = q.eq('partner_id', partnerId)
   const { data, error } = await q
   if (error) throw error
