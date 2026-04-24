@@ -13,6 +13,7 @@ import LandedCalculatorPage from './pages/LandedCalculator'
 import LogisticsPartnersPage from './pages/LogisticsPartners'
 import WarehousesPage from './pages/Warehouses'
 import ExchangeRatesPage from './pages/ExchangeRates'
+import HsCodesPage from './pages/HsCodes'
 
 function ProtectedRoute({ children, requireAdmin, requireSuperAdmin }) {
   const { user, profile, loading } = useApp()
@@ -42,6 +43,7 @@ function AppRoutes() {
       <Route path="/landed/partners" element={<ProtectedRoute requireAdmin><Layout><LogisticsPartnersPage /></Layout></ProtectedRoute>} />
       <Route path="/landed/warehouses" element={<ProtectedRoute requireAdmin><Layout><WarehousesPage /></Layout></ProtectedRoute>} />
       <Route path="/landed/rates" element={<ProtectedRoute requireAdmin><Layout><ExchangeRatesPage /></Layout></ProtectedRoute>} />
+      <Route path="/landed/hscodes" element={<ProtectedRoute requireAdmin><Layout><HsCodesPage /></Layout></ProtectedRoute>} />
       <Route path="/costs" element={<ProtectedRoute requireAdmin><Layout><CostsPage /></Layout></ProtectedRoute>} />
       <Route path="/techniques" element={<ProtectedRoute requireAdmin><Layout><TechniquesPage /></Layout></ProtectedRoute>} />
       <Route path="/products" element={<ProtectedRoute requireAdmin><Layout><ProductsPage /></Layout></ProtectedRoute>} />
