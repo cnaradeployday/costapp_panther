@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Calculator, Tag, Printer, Package, Users, Settings, LogOut, Menu, Percent, Ruler, Ship, Truck, Landmark, TrendingUp } from 'lucide-react'
+import { Calculator, Tag, Printer, Package, Users, Settings, LogOut, Menu, Percent, Ruler, Ship, Truck, Landmark, TrendingUp, FileText } from 'lucide-react'
 import { useState } from 'react'
 import { useApp } from '../lib/AppContext'
 import { signOut } from '../lib/supabase'
@@ -22,6 +22,7 @@ export default function Layout({ children }) {
       { to: '/landed/partners', icon: Truck, label: 'Logistics Partners' },
       { to: '/landed/warehouses', icon: Landmark, label: 'Warehouses' },
       { to: '/landed/rates', icon: TrendingUp, label: 'Exchange Rates' },
+      { to: '/landed/hscodes', icon: FileText, label: 'HS Codes & Duties' },
       { to: '/costs', icon: Tag, label: T('costs'), section: true },
       { to: '/units', icon: Ruler, label: 'Units of measure' },
       { to: '/techniques', icon: Printer, label: T('techniques') },
