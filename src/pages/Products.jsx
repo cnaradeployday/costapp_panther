@@ -290,8 +290,8 @@ export default function ProductsPage() {
                           const effective = getEffectiveValue(pc, fob)
                           const isPctCost = pc.cost_items?.value_type === 'percentage_of_fob'
                           const displayVal = pc.value_override !== null && pc.value_override !== undefined
-                            ? (pc.value_override + (isPctCost ? '% FOB*' : ' (override)*'))`
-                            : isPctCost ? `${pc.cost_items?.value_per_unit}% FOBa : `${pc.quantity} ${pc.cost_items?.unit}`
+                            ? pc.value_override + (isPctCost ? '% FOB*' : ' (override)*')
+                            : isPctCost ? (pc.cost_items?.value_per_unit + '% FOB') : (pc.quantity + ' ' + pc.cost_items?.unit)
                           return (
                             <div key={pc.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-2.5">
                               <span className="flex-1 text-sm text-gray-700">{pc.cost_items?.name}</span>
