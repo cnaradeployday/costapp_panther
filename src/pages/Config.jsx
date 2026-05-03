@@ -3,7 +3,7 @@ import { updateInstanceConfig } from '../lib/supabase'
 import { useApp } from '../lib/AppContext'
 import { Input, Select, Btn, Toast, PageHeader, Modal, Badge } from '../components/ui'
 import { getUsers, updateUserRole } from '../lib/supabase'
-import { Plus } from 'lucide-react'
+import { Plus, KeyRound } from 'lucide-react'
 
 // ── Config Page ───────────────────────────────────────────────
 export function ConfigPage() {
@@ -95,6 +95,9 @@ export function UsersPage() {
   const [inviteRole, setInviteRole] = useState('user')
   const [inviting, setInviting] = useState(false)
   const [toast, setToast] = useState(null)
+  const [pwModal, setPwModal] = useState(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [savingPw, setSavingPw] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -123,6 +126,29 @@ export function UsersPage() {
     } catch (e) {
       setToast({ message: e.message || T('error'), type: 'error' })
     } finally { setInviting(false) }
+  }
+
+  async function handlePasswordChange() {
+    if (!newPassword || !pwModal) return
+    if (newPassword.length < 6) {
+      setToast({ message: 'Password must be at least 6 characters', type: 'error' })
+      return
+    }
+    setSavingPw(true)
+    try {
+      const res = await fetch('/api/update-user-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: pwModal.id, password: newPassword })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setPwModal(null)
+      setNewPassword('')
+      setToast({ message: 'Password updated', type: 'success' })
+    } catch (e) {
+      setToast({ message: e.message || T('error'), type: 'error' })
+    } finally { setSavingPw(false) }
   }
 
   async function handleRoleChange(userId, role) {
@@ -155,6 +181,7 @@ export function UsersPage() {
                 <th className="text-left px-5 py-3">Email</th>
                 <th className="text-left px-4 py-3">{T('role')}</th>
                 <th className="px-4 py-3">Change role</th>
+                <th className="px-4 py-3">Password</th>
               </tr>
             </thead>
             <tbody>
@@ -172,6 +199,13 @@ export function UsersPage() {
                       <option value="admin">Admin</option>
                       <option value="superadmin">Super Admin</option>
                     </select>
+                  </td>
+                  <td className="px-4 py-3">
+                    <button onClick={() => { setPwModal(u); setNewPassword('') }}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                      title="Change password">
+                      <KeyRound size={15}/>
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -199,6 +233,22 @@ export function UsersPage() {
           <Btn variant="ghost" onClick={() => setModal(false)}>{T('cancel')}</Btn>
           <Btn onClick={handleInvite} disabled={inviting || !inviteEmail}>
             {inviting ? 'Sending...' : 'Send invitation'}
+          </Btn>
+        </div>
+      </Modal>
+
+      <Modal open={!!pwModal} onClose={() => { setPwModal(null); setNewPassword('') }}
+        title="Change password" width="max-w-md">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">{pwModal?.email}</p>
+          <Input label="New password" type="password" value={newPassword}
+            onChange={e => setNewPassword(e.target.value)}
+            placeholder="Min. 6 characters" />
+        </div>
+        <div className="flex justify-end gap-3 mt-6">
+          <Btn variant="ghost" onClick={() => { setPwModal(null); setNewPassword('') }}>{T('cancel')}</Btn>
+          <Btn onClick={handlePasswordChange} disabled={savingPw || !newPassword}>
+            {savingPw ? T('loading') : 'Update password'}
           </Btn>
         </div>
       </Modal>
