@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useApp } from '../lib/AppContext'
 import { Modal, Confirm, Toast, Btn, Input, Select, CategoryBadge, EmptyState, PageHeader, SearchInput, Toggle } from '../components/ui'
 
-const CATEGORIES = ['LANDED', 'ORIGINATION', 'HIT']
+const CATEGORIES = ['LANDED', 'ORIGINATION', 'HIT', 'QC_PRINT']
 const empty = { name: '', unit: '', category: 'LANDED', value_per_unit: '', value_type: 'nominal', active: true, technique_ids: [] }
 
 export default function CostsPage() {
