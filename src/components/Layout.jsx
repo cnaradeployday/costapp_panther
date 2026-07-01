@@ -23,7 +23,7 @@ export default function Layout({ children }) {
       { to: '/landed/warehouses', icon: Landmark, label: 'Warehouses' },
       { to: '/landed/rates', icon: TrendingUp, label: 'Exchange Rates' },
       { to: '/landed/hscodes', icon: FileText, label: 'HS Codes & Duties' },
-      { to: '/costs', icon: Tag, label: T('costs'), section: true },
+      { to: '/costs', icon: Tag, label: T('costs') },
       { to: '/units', icon: Ruler, label: 'Units of measure' },
       { to: '/techniques', icon: Printer, label: T('techniques') },
       { to: '/products', icon: Package, label: T('products') },
