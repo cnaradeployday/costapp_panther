@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
-import { getCostItems, upsertCostItem, deleteCostItem } from '../lib/supabase'
+import { getCostItems, upsertCostItem, deleteCostItem, getPrintTechniques } from '../lib/supabase'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../lib/AppContext'
 import { Modal, Confirm, Toast, Btn, Input, Select, CategoryBadge, EmptyState, PageHeader, SearchInput, Toggle } from '../components/ui'
 
 const CATEGORIES = ['LANDED', 'ORIGINATION', 'HIT']
-const empty = { name: '', unit: '', category: 'LANDED', value_per_unit: '', value_type: 'nominal', active: true }
+const empty = { name: '', unit: '', category: 'LANDED', value_per_unit: '', value_type: 'nominal', active: true, technique_ids: [] }
 
 export default function CostsPage() {
   const { T, fmt, tabVisible } = useApp()
   const [items, setItems] = useState([])
   const [units, setUnits] = useState([])
+  const [techniques, setTechniques] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterCat, setFilterCat] = useState('ALL')
@@ -25,12 +26,14 @@ export default function CostsPage() {
   async function load() {
     setLoading(true)
     try {
-      const [costs, uoms] = await Promise.all([
+      const [costs, uoms, techs] = await Promise.all([
         getCostItems(),
-        supabase.from('units_of_measure').select('*').order('name').then(r => r.data ?? [])
+        supabase.from('units_of_measure').select('*').order('name').then(r => r.data ?? []),
+        getPrintTechniques()
       ])
       setItems(costs)
       setUnits(uoms)
+      setTechniques(techs)
     } finally { setLoading(false) }
   }
 
@@ -39,8 +42,17 @@ export default function CostsPage() {
   function openNew() { setEditing(null); setForm(empty); setModal(true) }
   function openEdit(item) {
     setEditing(item)
-    setForm({ ...item, value_per_unit: String(item.value_per_unit) })
+    setForm({ ...item, value_per_unit: String(item.value_per_unit), technique_ids: item.technique_ids ?? [] })
     setModal(true)
+  }
+
+  function toggleTechnique(id) {
+    setForm(f => ({
+      ...f,
+      technique_ids: f.technique_ids.includes(id)
+        ? f.technique_ids.filter(x => x !== id)
+        : [...f.technique_ids, id]
+    }))
   }
 
   async function handleSave() {
@@ -55,6 +67,7 @@ export default function CostsPage() {
         value_per_unit: parseFloat(form.value_per_unit) || 0,
         value_type: form.value_type ?? 'nominal',
         active: form.active,
+        technique_ids: form.technique_ids,
       })
       setModal(false)
       setToast({ message: T('saved'), type: 'success' })
@@ -108,6 +121,7 @@ export default function CostsPage() {
                 <th className="text-left px-5 py-3">{T('name')}</th>
                 <th className="text-left px-4 py-3">{T('unit')}</th>
                 <th className="text-left px-4 py-3">{T('category')}</th>
+                <th className="text-left px-4 py-3">Techniques</th>
                 <th className="text-right px-4 py-3">{T('value_per_unit')}</th>
                 <th className="text-center px-4 py-3">{T('active')}</th>
                 <th className="px-4 py-3" />
@@ -119,6 +133,11 @@ export default function CostsPage() {
                   <td className="px-5 py-3 font-medium text-gray-900">{item.name}</td>
                   <td className="px-4 py-3 text-gray-500">{item.unit}</td>
                   <td className="px-4 py-3"><CategoryBadge category={item.category} /></td>
+                  <td className="px-4 py-3 text-xs text-gray-400">
+                    {!item.technique_ids?.length
+                      ? 'All'
+                      : techniques.filter(t => item.technique_ids.includes(t.id)).map(t => t.name).join(', ')}
+                  </td>
                   <td className="px-4 py-3 text-right font-mono text-gray-700">
                     {item.value_type === 'percentage_of_fob'
                       ? <span className="text-xs bg-violet-50 text-violet-700 px-2 py-0.5 rounded-lg">{item.value_per_unit}% of FOB</span>
@@ -188,6 +207,22 @@ export default function CostsPage() {
               Example: enter 12 for 12% of FOB. For a product with FOB €2.50 → cost = €0.30
             </p>
           )}
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">Applicable techniques</label>
+            <p className="text-xs text-gray-400 -mt-0.5 mb-1">Leave empty to make this cost available for all techniques.</p>
+            <div className="flex flex-wrap gap-2 border border-gray-200 rounded-lg p-3 max-h-40 overflow-y-auto">
+              {techniques.length === 0 ? (
+                <span className="text-xs text-gray-400">No techniques yet</span>
+              ) : techniques.map(t => (
+                <label key={t.id} className="flex items-center gap-1.5 text-xs text-gray-700 bg-gray-50 rounded-lg px-2 py-1 cursor-pointer">
+                  <input type="checkbox" checked={form.technique_ids.includes(t.id)}
+                    onChange={() => toggleTechnique(t.id)} />
+                  {t.name}
+                </label>
+              ))}
+            </div>
+          </div>
 
           <div className="flex items-center gap-3">
             <Toggle checked={form.active} onChange={v => setForm(f => ({ ...f, active: v }))} />

@@ -161,7 +161,9 @@ export default function TechniquesPage() {
                           onChange={e => setTcForm(f => ({ ...f, cost_item_id: e.target.value }))}
                           className="flex-1 min-w-40">
                           <option value="">— select —</option>
-                          {allCosts.map(c => <option key={c.id} value={c.id}>{c.name} ({c.unit})</option>)}
+                          {allCosts
+                            .filter(c => !c.technique_ids?.length || c.technique_ids.includes(tech.id))
+                            .map(c => <option key={c.id} value={c.id}>{c.name} ({c.unit})</option>)}
                         </Select>
                         <Input label={T('quantity')} type="number" step="0.0001" min="0"
                           value={tcForm.quantity}
