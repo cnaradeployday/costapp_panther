@@ -40,8 +40,9 @@ export const translations = {
     new_cost: 'Nuevo costo',
     edit_cost: 'Editar costo',
     LANDED: 'Landed',
-    ORIGINATION: 'Origination',
+    ORIGINATION: 'Origination - Machine Set Up',
     HIT: 'Hit',
+    QC_PRINT: 'First print for QC',
 
     // Técnicas
     techniques_title: 'Técnicas de impresión',
@@ -133,8 +134,9 @@ export const translations = {
     new_cost: 'New cost',
     edit_cost: 'Edit cost',
     LANDED: 'Landed',
-    ORIGINATION: 'Origination',
+    ORIGINATION: 'Origination - Machine Set Up',
     HIT: 'Hit',
+    QC_PRINT: 'First print for QC',
 
     techniques_title: 'Print techniques',
     new_technique: 'New technique',

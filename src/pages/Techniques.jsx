@@ -170,8 +170,9 @@ export default function TechniquesPage() {
                         <Select label={T('category')} value={tcForm.category}
                           onChange={e => setTcForm(f => ({ ...f, category: e.target.value }))}
                           className="w-36">
-                          <option value="ORIGINATION">Origination</option>
+                          <option value="ORIGINATION">Origination - Machine Set Up</option>
                           <option value="HIT">Hit</option>
+                          <option value="QC_PRINT">First print for QC</option>
                         </Select>
                         <div className="flex gap-2">
                           <Btn size="sm" onClick={() => handleAddTc(tech.id)} disabled={saving}>{T('add')}</Btn>

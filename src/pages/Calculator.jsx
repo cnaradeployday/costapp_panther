@@ -27,7 +27,7 @@ function calcLandedUnit(product) {
 }
 
 function calcPrintUnit(tech, qty) {
-  const origCosts = tech.technique_costs?.filter(tc => tc.category === 'ORIGINATION') ?? []
+  const origCosts = tech.technique_costs?.filter(tc => tc.category === 'ORIGINATION' || tc.category === 'QC_PRINT') ?? []
   const hitCosts  = tech.technique_costs?.filter(tc => tc.category === 'HIT') ?? []
 
   const origTotal = origCosts.reduce((s, tc) => {
