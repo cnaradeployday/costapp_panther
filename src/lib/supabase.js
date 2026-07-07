@@ -101,6 +101,10 @@ export async function upsertCostItem(item) {
 }
 
 export async function deleteCostItem(id) {
+  const { error: tcError } = await _client.from('technique_costs').delete().eq('cost_item_id', id)
+  if (tcError) throw tcError
+  const { error: pcError } = await _client.from('product_costs').delete().eq('cost_item_id', id)
+  if (pcError) throw pcError
   const { error } = await _client.from('cost_items').delete().eq('id', id)
   if (error) throw error
 }
