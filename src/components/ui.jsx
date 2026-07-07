@@ -139,8 +139,9 @@ export function Badge({ children, color = 'gray' }) {
 export function CategoryBadge({ category }) {
   const map = {
     LANDED:      { color: 'blue',    label: 'Landed' },
-    ORIGINATION: { color: 'amber',   label: 'Origination' },
+    ORIGINATION: { color: 'amber',   label: 'Origination - Machine Set Up' },
     HIT:         { color: 'emerald', label: 'Hit' },
+    QC_PRINT:    { color: 'violet',  label: 'First print for QC' },
   }
   const { color, label } = map[category] ?? { color: 'gray', label: category }
   return <Badge color={color}>{label}</Badge>
