@@ -47,11 +47,17 @@ export default function CostsPage() {
   }
 
   function toggleTechnique(id) {
+    setForm(f => {
+      const current = f.technique_ids.length === 0 ? techniques.map(t => t.id) : f.technique_ids
+      const next = current.includes(id) ? current.filter(x => x !== id) : [...current, id]
+      return { ...f, technique_ids: next.length === techniques.length ? [] : next }
+    })
+  }
+
+  function toggleAllTechniques() {
     setForm(f => ({
       ...f,
-      technique_ids: f.technique_ids.includes(id)
-        ? f.technique_ids.filter(x => x !== id)
-        : [...f.technique_ids, id]
+      technique_ids: f.technique_ids.length === 0 ? techniques.map(t => t.id) : []
     }))
   }
 
@@ -210,17 +216,26 @@ export default function CostsPage() {
 
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-gray-600">Applicable techniques</label>
-            <p className="text-xs text-gray-400 -mt-0.5 mb-1">Leave empty to make this cost available for all techniques.</p>
+            <p className="text-xs text-gray-400 -mt-0.5 mb-1">Selected by default for all techniques. Uncheck ALL to pick specific ones.</p>
             <div className="flex flex-wrap gap-2 border border-gray-200 rounded-lg p-3 max-h-40 overflow-y-auto">
               {techniques.length === 0 ? (
                 <span className="text-xs text-gray-400">No techniques yet</span>
-              ) : techniques.map(t => (
-                <label key={t.id} className="flex items-center gap-1.5 text-xs text-gray-700 bg-gray-50 rounded-lg px-2 py-1 cursor-pointer">
-                  <input type="checkbox" checked={form.technique_ids.includes(t.id)}
-                    onChange={() => toggleTechnique(t.id)} />
-                  {t.name}
-                </label>
-              ))}
+              ) : (
+                <>
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-gray-900 bg-gray-100 rounded-lg px-2 py-1 cursor-pointer">
+                    <input type="checkbox" checked={form.technique_ids.length === 0}
+                      onChange={toggleAllTechniques} />
+                    ALL
+                  </label>
+                  {techniques.map(t => (
+                    <label key={t.id} className="flex items-center gap-1.5 text-xs text-gray-700 bg-gray-50 rounded-lg px-2 py-1 cursor-pointer">
+                      <input type="checkbox" checked={form.technique_ids.length === 0 || form.technique_ids.includes(t.id)}
+                        onChange={() => toggleTechnique(t.id)} />
+                      {t.name}
+                    </label>
+                  ))}
+                </>
+              )}
             </div>
           </div>
 
