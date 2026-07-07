@@ -7,8 +7,13 @@ import { Confirm, Toast, Btn, Input, PageHeader } from '../components/ui'
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'STG', 'CNY']
 const empty = { currency_from: 'USD', currency_to: 'EUR', rate: '', valid_from: new Date().toISOString().split('T')[0], valid_to: '', notes: '' }
 
+function fmtDate(d, lang) {
+  if (!d) return null
+  return new Date(`${d}T00:00:00`).toLocaleDateString(lang === 'es' ? 'es-ES' : 'en-US', { day: 'numeric', month: 'short' })
+}
+
 export default function ExchangeRatesPage() {
-  const { tabVisible } = useApp()
+  const { tabVisible, lang } = useApp()
   const [rates, setRates] = useState([])
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(empty)
@@ -112,8 +117,8 @@ export default function ExchangeRatesPage() {
                     return (
                       <tr key={r.id} className={`border-b border-gray-50 hover:bg-gray-50 ${i === pairRates.length - 1 ? 'border-0' : ''}`}>
                         <td className="px-5 py-2.5 text-right font-mono font-semibold text-gray-900">{parseFloat(r.rate).toFixed(6)}</td>
-                        <td className="px-4 py-2.5 text-gray-600">{r.valid_from}</td>
-                        <td className="px-4 py-2.5 text-gray-400">{r.valid_to || '—'}</td>
+                        <td className="px-4 py-2.5 text-gray-600">{fmtDate(r.valid_from, lang)}</td>
+                        <td className="px-4 py-2.5 text-gray-400">{fmtDate(r.valid_to, lang) || '—'}</td>
                         <td className="px-4 py-2.5 text-gray-400 text-xs">{r.notes || '—'}</td>
                         <td className="px-4 py-2.5 text-center">
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
