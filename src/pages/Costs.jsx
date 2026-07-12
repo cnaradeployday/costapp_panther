@@ -39,7 +39,7 @@ export default function CostsPage() {
 
   useEffect(() => { load() }, [tabVisible])
 
-  function openNew() { setEditing(null); setForm(empty); setModal(true) }
+  function openNew() { setEditing(null); setForm({ ...empty, technique_ids: techniques.map(t => t.id) }); setModal(true) }
   function openEdit(item) {
     setEditing(item)
     setForm({ ...item, value_per_unit: String(item.value_per_unit), technique_ids: item.technique_ids ?? [] })
@@ -52,6 +52,13 @@ export default function CostsPage() {
       technique_ids: f.technique_ids.includes(id)
         ? f.technique_ids.filter(x => x !== id)
         : [...f.technique_ids, id]
+    }))
+  }
+
+  function toggleAllTechniques() {
+    setForm(f => ({
+      ...f,
+      technique_ids: f.technique_ids.length === techniques.length ? [] : techniques.map(t => t.id)
     }))
   }
 
@@ -209,7 +216,15 @@ export default function CostsPage() {
           )}
 
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-600">Applicable techniques</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-gray-600">Applicable techniques</label>
+              {techniques.length > 0 && (
+                <button type="button" onClick={toggleAllTechniques}
+                  className="text-xs font-medium text-slate-600 hover:text-slate-900">
+                  {form.technique_ids.length === techniques.length ? 'Deselect all' : 'Select all'}
+                </button>
+              )}
+            </div>
             <p className="text-xs text-gray-400 -mt-0.5 mb-1">Leave empty to make this cost available for all techniques.</p>
             <div className="flex flex-wrap gap-2 border border-gray-200 rounded-lg p-3 max-h-40 overflow-y-auto">
               {techniques.length === 0 ? (
