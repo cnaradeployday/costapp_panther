@@ -173,7 +173,10 @@ export default function TechniquesPage() {
                     {addingTc === tech.id && (
                       <div className="bg-gray-50 rounded-xl p-4 mb-3 flex flex-wrap gap-3 items-end">
                         <Select label="Cost item" value={tcForm.cost_item_id}
-                          onChange={e => setTcForm(f => ({ ...f, cost_item_id: e.target.value }))}
+                          onChange={e => {
+                            const c = allCosts.find(x => x.id === e.target.value)
+                            setTcForm(f => ({ ...f, cost_item_id: e.target.value, category: c?.category ?? f.category }))
+                          }}
                           className="flex-1 min-w-40">
                           <option value="">— select —</option>
                           {allCosts
@@ -185,13 +188,14 @@ export default function TechniquesPage() {
                           value={tcForm.quantity}
                           onChange={e => setTcForm(f => ({ ...f, quantity: e.target.value }))}
                           className="w-28" />
-                        <Select label={T('category')} value={tcForm.category}
-                          onChange={e => setTcForm(f => ({ ...f, category: e.target.value }))}
-                          className="w-36">
-                          <option value="ORIGINATION">Origination - Machine Set Up</option>
-                          <option value="HIT">Hit</option>
-                          <option value="QC_PRINT">First print for QC</option>
-                        </Select>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-xs font-medium text-gray-600">{T('category')}</label>
+                          <div className="h-[38px] flex items-center">
+                            {tcForm.cost_item_id
+                              ? <CategoryBadge category={tcForm.category} />
+                              : <span className="text-xs text-gray-400">—</span>}
+                          </div>
+                        </div>
                         <div className="flex gap-2">
                           <Btn size="sm" onClick={() => handleAddTc(tech.id)} disabled={saving}>{editingTcId ? T('save') : T('add')}</Btn>
                           <Btn size="sm" variant="ghost" onClick={cancelTc}>{T('cancel')}</Btn>
