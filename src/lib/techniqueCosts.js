@@ -3,10 +3,18 @@ export function costType(category) {
   return category === 'HIT' ? 'UNIT' : 'FIX'
 }
 
+// A cost item linked to a labour rate always reflects that rate's current €/hour ÷ 60,
+// so raising a labour rate updates every cost item and technique line that uses it.
+export function effectiveRate(costItem) {
+  if (!costItem) return 0
+  if (costItem.labour_rates) return (parseFloat(costItem.labour_rates.cost_per_hour) || 0) / 60
+  return parseFloat(costItem.value_per_unit ?? 0)
+}
+
 export function lineRate(tc) {
   return (tc.value_override !== null && tc.value_override !== undefined)
     ? parseFloat(tc.value_override)
-    : parseFloat(tc.cost_items?.value_per_unit ?? 0)
+    : effectiveRate(tc.cost_items)
 }
 
 export function lineTotal(tc) {
