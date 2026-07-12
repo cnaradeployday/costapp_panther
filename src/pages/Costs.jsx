@@ -3,7 +3,8 @@ import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { getCostItems, upsertCostItem, deleteCostItem, getPrintTechniques } from '../lib/supabase'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../lib/AppContext'
-import { Modal, Confirm, Toast, Btn, Input, Select, CategoryBadge, EmptyState, PageHeader, SearchInput, Toggle } from '../components/ui'
+import { costType } from '../lib/techniqueCosts'
+import { Modal, Confirm, Toast, Btn, Input, Select, Badge, CategoryBadge, EmptyState, PageHeader, SearchInput, Toggle } from '../components/ui'
 
 const CATEGORIES = ['LANDED', 'ORIGINATION', 'HIT', 'QC_PRINT']
 const empty = { name: '', unit: '', category: 'LANDED', value_per_unit: '', value_type: 'nominal', active: true, technique_ids: [] }
@@ -121,6 +122,7 @@ export default function CostsPage() {
                 <th className="text-left px-5 py-3">{T('name')}</th>
                 <th className="text-left px-4 py-3">{T('unit')}</th>
                 <th className="text-left px-4 py-3">{T('category')}</th>
+                <th className="text-left px-4 py-3">Cost type</th>
                 <th className="text-left px-4 py-3">Techniques</th>
                 <th className="text-right px-4 py-3">{T('value_per_unit')}</th>
                 <th className="text-center px-4 py-3">{T('active')}</th>
@@ -133,6 +135,11 @@ export default function CostsPage() {
                   <td className="px-5 py-3 font-medium text-gray-900">{item.name}</td>
                   <td className="px-4 py-3 text-gray-500">{item.unit}</td>
                   <td className="px-4 py-3"><CategoryBadge category={item.category} /></td>
+                  <td className="px-4 py-3">
+                    {item.category === 'LANDED'
+                      ? <span className="text-xs text-gray-300">—</span>
+                      : <Badge color={costType(item.category) === 'FIX' ? 'amber' : 'emerald'}>{costType(item.category)}</Badge>}
+                  </td>
                   <td className="px-4 py-3 text-xs text-gray-400">
                     {!item.technique_ids?.length
                       ? 'All'
@@ -190,10 +197,17 @@ export default function CostsPage() {
                 ))}
               </select>
             </div>
-            <Select label={T('category')} value={form.category}
-              onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
-              {CATEGORIES.map(c => <option key={c} value={c}>{T(c)}</option>)}
-            </Select>
+            <div className="flex flex-col gap-1">
+              <Select label={T('category')} value={form.category}
+                onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
+                {CATEGORIES.map(c => <option key={c} value={c}>{T(c)}</option>)}
+              </Select>
+              {form.category !== 'LANDED' && (
+                <span className="text-xs text-gray-400">
+                  Cost type: <span className="font-medium text-gray-600">{costType(form.category)}</span>
+                </span>
+              )}
+            </div>
           </div>
 
           <Input

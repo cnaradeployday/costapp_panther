@@ -47,7 +47,7 @@ export default function TechniquesPage() {
   const [confirm, setConfirm] = useState(null)
   const [confirmTc, setConfirmTc] = useState(null)
   const [toast, setToast] = useState(null)
-  const [tcForm, setTcForm] = useState({ cost_item_id: '', quantity: '1', category: 'ORIGINATION', min_charge: '' })
+  const [tcForm, setTcForm] = useState({ cost_item_id: '', quantity: '1', min_charge: '' })
   const [addingTc, setAddingTc] = useState(null)
   const [dragInfo, setDragInfo] = useState(null)
 
@@ -95,20 +95,21 @@ export default function TechniquesPage() {
   }
 
   async function handleAddTc(techniqueId) {
-    if (!tcForm.cost_item_id) return
+    const item = allCosts.find(c => c.id === tcForm.cost_item_id)
+    if (!item) return
     setSaving(true)
     try {
       const tech = techniques.find(t => t.id === techniqueId)
       await upsertTechniqueCost({
         technique_id: techniqueId,
-        cost_item_id: tcForm.cost_item_id,
+        cost_item_id: item.id,
         quantity: parseFloat(tcForm.quantity) || 1,
-        category: tcForm.category,
+        category: item.category, // inherited from the Cost Item — kept in sync with the Costs page, never re-picked here
         min_charge: tcForm.min_charge === '' ? null : parseFloat(tcForm.min_charge),
         sort_order: tech?.technique_costs?.length ?? 0,
       })
       setAddingTc(null)
-      setTcForm({ cost_item_id: '', quantity: '1', category: 'ORIGINATION', min_charge: '' })
+      setTcForm({ cost_item_id: '', quantity: '1', min_charge: '' })
       setToast({ message: T('saved'), type: 'success' })
       await load()
     } catch { setToast({ message: T('error'), type: 'error' })
@@ -209,37 +210,47 @@ export default function TechniquesPage() {
                       </Btn>
                     </div>
 
-                    {addingTc === tech.id && (
-                      <div className="bg-gray-50 rounded-xl p-4 mb-3 flex flex-wrap gap-3 items-end">
-                        <Select label="Cost item" value={tcForm.cost_item_id}
-                          onChange={e => setTcForm(f => ({ ...f, cost_item_id: e.target.value }))}
-                          className="flex-1 min-w-40">
-                          <option value="">— select —</option>
-                          {allCosts
-                            .filter(c => !c.technique_ids?.length || c.technique_ids.includes(tech.id))
-                            .map(c => <option key={c.id} value={c.id}>{c.name} ({c.unit})</option>)}
-                        </Select>
-                        <Input label={T('quantity')} type="number" step="0.0001" min="0"
-                          value={tcForm.quantity}
-                          onChange={e => setTcForm(f => ({ ...f, quantity: e.target.value }))}
-                          className="w-24" />
-                        <Select label={T('category')} value={tcForm.category}
-                          onChange={e => setTcForm(f => ({ ...f, category: e.target.value }))}
-                          className="w-36">
-                          <option value="ORIGINATION">Origination - Machine Set Up</option>
-                          <option value="HIT">Hit</option>
-                          <option value="QC_PRINT">First print for QC</option>
-                        </Select>
-                        <Input label="Min charge" type="number" step="0.01" min="0"
-                          value={tcForm.min_charge}
-                          onChange={e => setTcForm(f => ({ ...f, min_charge: e.target.value }))}
-                          className="w-24" placeholder="—" />
-                        <div className="flex gap-2">
-                          <Btn size="sm" onClick={() => handleAddTc(tech.id)} disabled={saving}>{T('add')}</Btn>
-                          <Btn size="sm" variant="ghost" onClick={() => setAddingTc(null)}>{T('cancel')}</Btn>
+                    {addingTc === tech.id && (() => {
+                      const selectedItem = allCosts.find(c => c.id === tcForm.cost_item_id)
+                      return (
+                        <div className="bg-gray-50 rounded-xl p-4 mb-3 flex flex-wrap gap-3 items-end">
+                          <Select label="Description (cost item)" value={tcForm.cost_item_id}
+                            onChange={e => setTcForm(f => ({ ...f, cost_item_id: e.target.value }))}
+                            className="flex-1 min-w-40">
+                            <option value="">— select —</option>
+                            {allCosts
+                              .filter(c => !c.technique_ids?.length || c.technique_ids.includes(tech.id))
+                              .map(c => <option key={c.id} value={c.id}>{c.name} ({c.unit})</option>)}
+                          </Select>
+                          <div className="flex flex-col gap-1">
+                            <label className="text-xs font-medium text-gray-600">Cost type</label>
+                            <div className="h-[38px] flex items-center">
+                              {selectedItem
+                                ? <Badge color={costType(selectedItem.category) === 'FIX' ? 'amber' : 'emerald'}>{costType(selectedItem.category)}</Badge>
+                                : <span className="text-xs text-gray-300">—</span>}
+                            </div>
+                          </div>
+                          <Input label={T('quantity')} type="number" step="0.0001" min="0"
+                            value={tcForm.quantity}
+                            onChange={e => setTcForm(f => ({ ...f, quantity: e.target.value }))}
+                            className="w-24" />
+                          <div className="flex flex-col gap-1">
+                            <label className="text-xs font-medium text-gray-600">Cost per unit</label>
+                            <div className="h-[38px] flex items-center text-sm font-mono text-gray-500">
+                              {selectedItem ? `${currency} ${fmt2(selectedItem.value_per_unit)}` : '—'}
+                            </div>
+                          </div>
+                          <Input label="Min charge" type="number" step="0.01" min="0"
+                            value={tcForm.min_charge}
+                            onChange={e => setTcForm(f => ({ ...f, min_charge: e.target.value }))}
+                            className="w-24" placeholder="—" />
+                          <div className="flex gap-2">
+                            <Btn size="sm" onClick={() => handleAddTc(tech.id)} disabled={saving || !tcForm.cost_item_id}>{T('add')}</Btn>
+                            <Btn size="sm" variant="ghost" onClick={() => setAddingTc(null)}>{T('cancel')}</Btn>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )
+                    })()}
 
                     {tech.technique_costs?.length === 0 ? (
                       <p className="text-sm text-gray-400 py-2">No costs configured</p>
@@ -252,9 +263,9 @@ export default function TechniquesPage() {
                               <th className="text-left px-2 py-2 w-10">Step</th>
                               <th className="text-left px-2 py-2">Description</th>
                               <th className="text-left px-2 py-2">Cost type</th>
-                              <th className="text-left px-2 py-2">Unit</th>
+                              <th className="text-left px-2 py-2">Unit of measure</th>
                               <th className="text-right px-2 py-2">Qty</th>
-                              <th className="text-right px-2 py-2">Cost / unit</th>
+                              <th className="text-right px-2 py-2">Cost per unit of measure</th>
                               <th className="text-right px-2 py-2">Total cost</th>
                               <th className="text-right px-2 py-2">Min charge</th>
                               <th className="w-8" />
