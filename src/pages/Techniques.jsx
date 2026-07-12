@@ -29,6 +29,7 @@ export default function TechniquesPage() {
   const [toast, setToast] = useState(null)
   const [tcForm, setTcForm] = useState({ cost_item_id: '', quantity: '1', category: 'ORIGINATION' })
   const [addingTc, setAddingTc] = useState(null)
+  const [editingTcId, setEditingTcId] = useState(null)
 
   async function load() {
     setLoading(true)
@@ -78,17 +79,31 @@ export default function TechniquesPage() {
     setSaving(true)
     try {
       await upsertTechniqueCost({
+        ...(editingTcId ? { id: editingTcId } : {}),
         technique_id: techniqueId,
         cost_item_id: tcForm.cost_item_id,
         quantity: parseFloat(tcForm.quantity) || 1,
         category: tcForm.category,
       })
       setAddingTc(null)
+      setEditingTcId(null)
       setTcForm({ cost_item_id: '', quantity: '1', category: 'ORIGINATION' })
       setToast({ message: T('saved'), type: 'success' })
       await load()
     } catch { setToast({ message: T('error'), type: 'error' })
     } finally { setSaving(false) }
+  }
+
+  function openEditTc(tc) {
+    setTcForm({ cost_item_id: tc.cost_item_id, quantity: String(tc.quantity), category: tc.category })
+    setEditingTcId(tc.id)
+    setAddingTc(tc.technique_id)
+  }
+
+  function cancelTc() {
+    setAddingTc(null)
+    setEditingTcId(null)
+    setTcForm({ cost_item_id: '', quantity: '1', category: 'ORIGINATION' })
   }
 
   async function handleDeleteTc(id) {
@@ -150,7 +165,7 @@ export default function TechniquesPage() {
                   <div className="border-t border-gray-50 px-5 py-4">
                     <div className="flex items-center justify-between mb-3">
                       <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">{T('technique_costs')}</p>
-                      <Btn size="sm" variant="secondary" onClick={() => setAddingTc(tech.id)}>
+                      <Btn size="sm" variant="secondary" onClick={() => { setEditingTcId(null); setTcForm({ cost_item_id: '', quantity: '1', category: 'ORIGINATION' }); setAddingTc(tech.id) }}>
                         <Plus size={12}/>{T('add_cost_to_technique')}
                       </Btn>
                     </div>
@@ -163,6 +178,7 @@ export default function TechniquesPage() {
                           <option value="">— select —</option>
                           {allCosts
                             .filter(c => !c.technique_ids?.length || c.technique_ids.includes(tech.id))
+                            .filter(c => c.id === tcForm.cost_item_id || !tech.technique_costs?.some(tc => tc.cost_item_id === c.id))
                             .map(c => <option key={c.id} value={c.id}>{c.name} ({c.unit})</option>)}
                         </Select>
                         <Input label={T('quantity')} type="number" step="0.0001" min="0"
@@ -177,8 +193,8 @@ export default function TechniquesPage() {
                           <option value="QC_PRINT">First print for QC</option>
                         </Select>
                         <div className="flex gap-2">
-                          <Btn size="sm" onClick={() => handleAddTc(tech.id)} disabled={saving}>{T('add')}</Btn>
-                          <Btn size="sm" variant="ghost" onClick={() => setAddingTc(null)}>{T('cancel')}</Btn>
+                          <Btn size="sm" onClick={() => handleAddTc(tech.id)} disabled={saving}>{editingTcId ? T('save') : T('add')}</Btn>
+                          <Btn size="sm" variant="ghost" onClick={cancelTc}>{T('cancel')}</Btn>
                         </div>
                       </div>
                     )}
@@ -195,6 +211,10 @@ export default function TechniquesPage() {
                             <span className="text-xs font-mono text-gray-500">
                               {fmt(tc.quantity * (tc.cost_items?.value_per_unit ?? 0))}
                             </span>
+                            <button onClick={() => openEditTc(tc)}
+                              className="p-1 rounded-lg hover:bg-gray-100 text-gray-300 hover:text-gray-600">
+                              <Pencil size={12}/>
+                            </button>
                             <button onClick={() => setConfirmTc(tc.id)}
                               className="p-1 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-400">
                               <Trash2 size={12}/>
