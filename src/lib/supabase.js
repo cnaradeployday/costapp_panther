@@ -115,6 +115,7 @@ export async function getPrintTechniques() {
     .from('print_techniques')
     .select(`*, technique_costs(*, cost_items(*))`)
     .order('name')
+    .order('sort_order', { referencedTable: 'technique_costs' })
   if (error) throw error
   return data
 }
@@ -141,6 +142,11 @@ export async function upsertTechniqueCost(tc) {
 
 export async function deleteTechniqueCost(id) {
   const { error } = await _client.from('technique_costs').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function reorderTechniqueCosts(items) {
+  const { error } = await _client.from('technique_costs').upsert(items)
   if (error) throw error
 }
 

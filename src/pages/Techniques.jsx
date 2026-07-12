@@ -1,20 +1,40 @@
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
+import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, GripVertical } from 'lucide-react'
 import {
   getPrintTechniques, upsertPrintTechnique, deletePrintTechnique,
-  getCostItems, upsertTechniqueCost, deleteTechniqueCost
+  getCostItems, upsertTechniqueCost, deleteTechniqueCost, reorderTechniqueCosts
 } from '../lib/supabase'
 import { useApp } from '../lib/AppContext'
+import { costType, lineRate, lineTotal } from '../lib/techniqueCosts'
 import {
-  Modal, Confirm, Toast, Btn, Input, Select,
+  Modal, Confirm, Toast, Btn, Input, Select, Badge,
   CategoryBadge, EmptyState, PageHeader, SearchInput, Toggle
 } from '../components/ui'
 
 const PRESETS = ['pad_printing', 'screen_printing', 'embroidery', 'laser', 'dtf', 'sublimation', 'uv_printing', 'other']
 const empty = { name: '', base_preset: '', active: true }
+const fmt2 = n => (parseFloat(n) || 0).toFixed(2)
+
+function EditableCell({ value, onCommit, placeholder = '—' }) {
+  const [local, setLocal] = useState(value ?? '')
+  useEffect(() => { setLocal(value ?? '') }, [value])
+  return (
+    <input
+      type="number" step="0.0001" min="0"
+      value={local}
+      placeholder={placeholder}
+      onChange={e => setLocal(e.target.value)}
+      onBlur={() => {
+        const num = local === '' ? null : parseFloat(local)
+        if (num !== (value ?? null)) onCommit(num)
+      }}
+      className="w-20 text-right text-sm font-mono bg-emerald-50 border border-emerald-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+    />
+  )
+}
 
 export default function TechniquesPage() {
-  const { T, fmt, tabVisible } = useApp()
+  const { T, fmt, currency, tabVisible } = useApp()
   const [techniques, setTechniques] = useState([])
   const [allCosts, setAllCosts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -27,8 +47,9 @@ export default function TechniquesPage() {
   const [confirm, setConfirm] = useState(null)
   const [confirmTc, setConfirmTc] = useState(null)
   const [toast, setToast] = useState(null)
-  const [tcForm, setTcForm] = useState({ cost_item_id: '', quantity: '1', category: 'ORIGINATION' })
+  const [tcForm, setTcForm] = useState({ cost_item_id: '', quantity: '1', category: 'ORIGINATION', min_charge: '' })
   const [addingTc, setAddingTc] = useState(null)
+  const [dragInfo, setDragInfo] = useState(null)
 
   async function load() {
     setLoading(true)
@@ -77,14 +98,17 @@ export default function TechniquesPage() {
     if (!tcForm.cost_item_id) return
     setSaving(true)
     try {
+      const tech = techniques.find(t => t.id === techniqueId)
       await upsertTechniqueCost({
         technique_id: techniqueId,
         cost_item_id: tcForm.cost_item_id,
         quantity: parseFloat(tcForm.quantity) || 1,
         category: tcForm.category,
+        min_charge: tcForm.min_charge === '' ? null : parseFloat(tcForm.min_charge),
+        sort_order: tech?.technique_costs?.length ?? 0,
       })
       setAddingTc(null)
-      setTcForm({ cost_item_id: '', quantity: '1', category: 'ORIGINATION' })
+      setTcForm({ cost_item_id: '', quantity: '1', category: 'ORIGINATION', min_charge: '' })
       setToast({ message: T('saved'), type: 'success' })
       await load()
     } catch { setToast({ message: T('error'), type: 'error' })
@@ -97,6 +121,36 @@ export default function TechniquesPage() {
       setConfirmTc(null)
       await load()
     } catch { setToast({ message: T('error'), type: 'error' }) }
+  }
+
+  function updateTcLocal(techId, tcId, patch) {
+    setTechniques(prev => prev.map(t => t.id !== techId ? t : {
+      ...t,
+      technique_costs: t.technique_costs.map(tc => tc.id === tcId ? { ...tc, ...patch } : tc)
+    }))
+  }
+
+  async function commitTcField(techId, tcId, field, value) {
+    updateTcLocal(techId, tcId, { [field]: value })
+    try {
+      await upsertTechniqueCost({ id: tcId, [field]: value })
+    } catch {
+      setToast({ message: T('error'), type: 'error' })
+      await load()
+    }
+  }
+
+  function handleDrop(techId, toIdx) {
+    if (!dragInfo || dragInfo.techId !== techId || dragInfo.fromIdx === toIdx) { setDragInfo(null); return }
+    const tech = techniques.find(t => t.id === techId)
+    if (!tech) { setDragInfo(null); return }
+    const rows = [...tech.technique_costs]
+    const [moved] = rows.splice(dragInfo.fromIdx, 1)
+    rows.splice(toIdx, 0, moved)
+    setDragInfo(null)
+    setTechniques(prev => prev.map(t => t.id === techId ? { ...t, technique_costs: rows } : t))
+    reorderTechniqueCosts(rows.map((tc, idx) => ({ id: tc.id, sort_order: idx })))
+      .catch(() => setToast({ message: T('error'), type: 'error' }))
   }
 
   const filtered = techniques.filter(t => t.name.toLowerCase().includes(search.toLowerCase()))
@@ -168,7 +222,7 @@ export default function TechniquesPage() {
                         <Input label={T('quantity')} type="number" step="0.0001" min="0"
                           value={tcForm.quantity}
                           onChange={e => setTcForm(f => ({ ...f, quantity: e.target.value }))}
-                          className="w-28" />
+                          className="w-24" />
                         <Select label={T('category')} value={tcForm.category}
                           onChange={e => setTcForm(f => ({ ...f, category: e.target.value }))}
                           className="w-36">
@@ -176,6 +230,10 @@ export default function TechniquesPage() {
                           <option value="HIT">Hit</option>
                           <option value="QC_PRINT">First print for QC</option>
                         </Select>
+                        <Input label="Min charge" type="number" step="0.01" min="0"
+                          value={tcForm.min_charge}
+                          onChange={e => setTcForm(f => ({ ...f, min_charge: e.target.value }))}
+                          className="w-24" placeholder="—" />
                         <div className="flex gap-2">
                           <Btn size="sm" onClick={() => handleAddTc(tech.id)} disabled={saving}>{T('add')}</Btn>
                           <Btn size="sm" variant="ghost" onClick={() => setAddingTc(null)}>{T('cancel')}</Btn>
@@ -186,21 +244,71 @@ export default function TechniquesPage() {
                     {tech.technique_costs?.length === 0 ? (
                       <p className="text-sm text-gray-400 py-2">No costs configured</p>
                     ) : (
-                      <div className="space-y-1.5">
-                        {tech.technique_costs?.map(tc => (
-                          <div key={tc.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-2.5">
-                            <CategoryBadge category={tc.category} />
-                            <span className="flex-1 text-sm text-gray-700">{tc.cost_items?.name}</span>
-                            <span className="text-xs text-gray-400">{tc.quantity} {tc.cost_items?.unit}</span>
-                            <span className="text-xs font-mono text-gray-500">
-                              {fmt(tc.quantity * (tc.cost_items?.value_per_unit ?? 0))}
-                            </span>
-                            <button onClick={() => setConfirmTc(tc.id)}
-                              className="p-1 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-400">
-                              <Trash2 size={12}/>
-                            </button>
-                          </div>
-                        ))}
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="text-xs text-gray-400 font-medium uppercase tracking-wider">
+                              <th className="w-8" />
+                              <th className="text-left px-2 py-2 w-10">Step</th>
+                              <th className="text-left px-2 py-2">Description</th>
+                              <th className="text-left px-2 py-2">Cost type</th>
+                              <th className="text-left px-2 py-2">Unit</th>
+                              <th className="text-right px-2 py-2">Qty</th>
+                              <th className="text-right px-2 py-2">Cost / unit</th>
+                              <th className="text-right px-2 py-2">Total cost</th>
+                              <th className="text-right px-2 py-2">Min charge</th>
+                              <th className="w-8" />
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {tech.technique_costs?.map((tc, idx) => {
+                              const raw = (parseFloat(tc.quantity) || 0) * lineRate(tc)
+                              const total = lineTotal(tc)
+                              const floored = tc.min_charge !== null && tc.min_charge !== undefined && tc.min_charge !== '' &&
+                                parseFloat(tc.min_charge) > raw
+                              return (
+                                <tr key={tc.id}
+                                  draggable
+                                  onDragStart={() => setDragInfo({ techId: tech.id, fromIdx: idx })}
+                                  onDragOver={e => e.preventDefault()}
+                                  onDrop={() => handleDrop(tech.id, idx)}
+                                  className={`border-t border-gray-50 hover:bg-gray-50 transition-colors ${dragInfo?.techId === tech.id && dragInfo.fromIdx === idx ? 'opacity-40' : ''}`}>
+                                  <td className="px-2 py-1.5 text-gray-300 cursor-grab active:cursor-grabbing">
+                                    <GripVertical size={14}/>
+                                  </td>
+                                  <td className="px-2 py-1.5 text-gray-400 text-xs">{idx + 1}</td>
+                                  <td className="px-2 py-1.5 text-gray-700">{tc.cost_items?.name}</td>
+                                  <td className="px-2 py-1.5">
+                                    <Badge color={costType(tc.category) === 'FIX' ? 'amber' : 'emerald'}>
+                                      {costType(tc.category)}
+                                    </Badge>
+                                  </td>
+                                  <td className="px-2 py-1.5 text-gray-400 text-xs">{tc.cost_items?.unit}</td>
+                                  <td className="px-2 py-1.5 text-right">
+                                    <EditableCell value={tc.quantity}
+                                      onCommit={v => commitTcField(tech.id, tc.id, 'quantity', v ?? 0)} />
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right font-mono text-gray-500 text-xs">
+                                    {currency} {fmt2(lineRate(tc))}
+                                  </td>
+                                  <td className={`px-2 py-1.5 text-right font-mono text-xs font-semibold ${floored ? 'text-amber-600' : 'text-gray-700'}`}>
+                                    {currency} {fmt2(total)}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right">
+                                    <EditableCell value={tc.min_charge}
+                                      onCommit={v => commitTcField(tech.id, tc.id, 'min_charge', v)} />
+                                  </td>
+                                  <td className="px-2 py-1.5">
+                                    <button onClick={() => setConfirmTc(tc.id)}
+                                      className="p-1 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-400">
+                                      <Trash2 size={12}/>
+                                    </button>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
                       </div>
                     )}
                   </div>
