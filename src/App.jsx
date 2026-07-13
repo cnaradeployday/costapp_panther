@@ -3,6 +3,7 @@ import { AppProvider, useApp } from './lib/AppContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import CostsPage from './pages/Costs'
+import LabourPage from './pages/Labour'
 import TechniquesPage from './pages/Techniques'
 import ProductsPage from './pages/Products'
 import CalculatorPage from './pages/Calculator'
@@ -45,6 +46,7 @@ function AppRoutes() {
       <Route path="/landed/rates" element={<ProtectedRoute requireAdmin><Layout><ExchangeRatesPage /></Layout></ProtectedRoute>} />
       <Route path="/landed/hscodes" element={<ProtectedRoute requireAdmin><Layout><HsCodesPage /></Layout></ProtectedRoute>} />
       <Route path="/costs" element={<ProtectedRoute requireAdmin><Layout><CostsPage /></Layout></ProtectedRoute>} />
+      <Route path="/labour" element={<ProtectedRoute requireAdmin><Layout><LabourPage /></Layout></ProtectedRoute>} />
       <Route path="/techniques" element={<ProtectedRoute requireAdmin><Layout><TechniquesPage /></Layout></ProtectedRoute>} />
       <Route path="/products" element={<ProtectedRoute requireAdmin><Layout><ProductsPage /></Layout></ProtectedRoute>} />
       <Route path="/units" element={<ProtectedRoute requireAdmin><Layout><UnitsPage /></Layout></ProtectedRoute>} />

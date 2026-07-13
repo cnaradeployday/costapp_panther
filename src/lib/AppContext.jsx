@@ -28,20 +28,8 @@ export function AppProvider({ children }) {
         .maybeSingle()
 
       if (!data && sessionUser.email) {
-        const res = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('email', sessionUser.email)
-          .maybeSingle()
-        data = res.data
-
-        if (data && data.id !== sessionUser.id) {
-          await supabase
-            .from('user_profiles')
-            .update({ id: sessionUser.id })
-            .eq('email', sessionUser.email)
-          data.id = sessionUser.id
-        }
+        const { data: linked } = await supabase.rpc('link_my_profile')
+        data = linked
       }
 
       setProfile(data)

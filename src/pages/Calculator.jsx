@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getProducts, getPrintTechniques, getMarginTiers, getQtyBreaks } from '../lib/supabase'
 import { useApp } from '../lib/AppContext'
+import { lineTotal } from '../lib/techniqueCosts'
 import { Calculator, FileSpreadsheet, FileText, Plus, X } from 'lucide-react'
 
 function getMargin(tiers, totalOrderValue) {
@@ -30,19 +31,8 @@ function calcPrintUnit(tech, qty) {
   const origCosts = tech.technique_costs?.filter(tc => tc.category === 'ORIGINATION' || tc.category === 'QC_PRINT') ?? []
   const hitCosts  = tech.technique_costs?.filter(tc => tc.category === 'HIT') ?? []
 
-  const origTotal = origCosts.reduce((s, tc) => {
-    const val = (tc.value_override !== null && tc.value_override !== undefined)
-      ? parseFloat(tc.value_override)
-      : parseFloat(tc.cost_items?.value_per_unit ?? 0)
-    return s + val * parseFloat(tc.quantity)
-  }, 0)
-
-  const hitUnit = hitCosts.reduce((s, tc) => {
-    const val = (tc.value_override !== null && tc.value_override !== undefined)
-      ? parseFloat(tc.value_override)
-      : parseFloat(tc.cost_items?.value_per_unit ?? 0)
-    return s + val * parseFloat(tc.quantity)
-  }, 0)
+  const origTotal = origCosts.reduce((s, tc) => s + lineTotal(tc), 0)
+  const hitUnit = hitCosts.reduce((s, tc) => s + lineTotal(tc), 0)
 
   return {
     id: tech.id, name: tech.name,
