@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Calculator, Tag, Printer, Package, Users, Settings, LogOut, Menu, Percent, Ruler, Ship, Truck, Landmark, TrendingUp, FileText } from 'lucide-react'
+import { Calculator, Tag, Printer, Package, Users, Settings, LogOut, Menu, Percent, Ruler, Ship, Truck, Landmark, TrendingUp, FileText, HardHat } from 'lucide-react'
 import { useState } from 'react'
 import { useApp } from '../lib/AppContext'
 import { signOut } from '../lib/supabase'
@@ -24,6 +24,7 @@ export default function Layout({ children }) {
       { to: '/landed/rates', icon: TrendingUp, label: 'Exchange Rates' },
       { to: '/landed/hscodes', icon: FileText, label: 'HS Codes & Duties' },
       { to: '/costs', icon: Tag, label: T('costs') },
+      { to: '/labour', icon: HardHat, label: 'Labour costs' },
       { to: '/units', icon: Ruler, label: 'Units of measure' },
       { to: '/techniques', icon: Printer, label: T('techniques') },
       { to: '/products', icon: Package, label: T('products') },

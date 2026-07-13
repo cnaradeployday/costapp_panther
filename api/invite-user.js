@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { requireSuperAdmin } from './_auth.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -11,6 +12,9 @@ export default async function handler(req, res) {
     process.env.SUPABASE_SERVICE_ROLE_KEY,
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
+
+  const auth = await requireSuperAdmin(req, supabase)
+  if (auth.error) return res.status(auth.status).json({ error: auth.error })
 
   // Crear usuario con invitación
   const { data, error } = await supabase.auth.admin.inviteUserByEmail(email, {

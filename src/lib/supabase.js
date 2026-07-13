@@ -53,6 +53,11 @@ export async function signOut() {
   if (error) throw error
 }
 
+export async function getAccessToken() {
+  const { data: { session } } = await _client.auth.getSession()
+  return session?.access_token ?? null
+}
+
 export async function getCurrentProfile() {
   const { data: { user } } = await _client.auth.getUser()
   if (!user) return null
@@ -84,7 +89,7 @@ export async function updateInstanceConfig(updates) {
 
 // ── Cost items ────────────────────────────────────────────────
 export async function getCostItems(category = null) {
-  let q = _client.from('cost_items').select('*').order('name')
+  let q = _client.from('cost_items').select('*, labour_rates(*)').order('name')
   if (category) q = q.eq('category', category)
   const { data, error } = await q
   if (error) throw error
@@ -113,8 +118,9 @@ export async function deleteCostItem(id) {
 export async function getPrintTechniques() {
   const { data, error } = await _client
     .from('print_techniques')
-    .select(`*, technique_costs(*, cost_items(*))`)
+    .select(`*, technique_costs(*, cost_items(*, labour_rates(*)))`)
     .order('name')
+    .order('sort_order', { referencedTable: 'technique_costs' })
   if (error) throw error
   return data
 }
@@ -141,6 +147,11 @@ export async function upsertTechniqueCost(tc) {
 
 export async function deleteTechniqueCost(id) {
   const { error } = await _client.from('technique_costs').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function reorderTechniqueCosts(items) {
+  const { error } = await _client.from('technique_costs').upsert(items)
   if (error) throw error
 }
 
@@ -188,6 +199,30 @@ export async function getUsers() {
 
 export async function updateUserRole(userId, role) {
   const { error } = await _client.from('user_profiles').update({ role }).eq('id', userId)
+  if (error) throw error
+}
+
+// ── Labour rates ──────────────────────────────────────────────
+export async function getLabourRates() {
+  const { data, error } = await _client
+    .from('labour_rates')
+    .select('*')
+    .order('skill').order('experience_level')
+  if (error) throw error
+  return data
+}
+
+export async function upsertLabourRate(rate) {
+  const { data, error } = await _client
+    .from('labour_rates')
+    .upsert({ ...rate, updated_at: new Date().toISOString() })
+    .select().single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteLabourRate(id) {
+  const { error } = await _client.from('labour_rates').delete().eq('id', id)
   if (error) throw error
 }
 

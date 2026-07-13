@@ -1,18 +1,20 @@
 import { useEffect, useState } from 'react'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
-import { getCostItems, upsertCostItem, deleteCostItem, getPrintTechniques } from '../lib/supabase'
+import { getCostItems, upsertCostItem, deleteCostItem, getPrintTechniques, getLabourRates } from '../lib/supabase'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../lib/AppContext'
-import { Modal, Confirm, Toast, Btn, Input, Select, CategoryBadge, EmptyState, PageHeader, SearchInput, Toggle } from '../components/ui'
+import { costType, effectiveRate } from '../lib/techniqueCosts'
+import { Modal, Confirm, Toast, Btn, Input, Select, Badge, CategoryBadge, EmptyState, PageHeader, SearchInput, Toggle } from '../components/ui'
 
 const CATEGORIES = ['LANDED', 'ORIGINATION', 'HIT', 'QC_PRINT']
-const empty = { name: '', unit: '', category: 'LANDED', value_per_unit: '', value_type: 'nominal', active: true, technique_ids: [] }
+const empty = { name: '', unit: '', category: 'LANDED', value_per_unit: '', value_type: 'nominal', active: true, technique_ids: [], labour_rate_id: '' }
 
 export default function CostsPage() {
   const { T, fmt, tabVisible } = useApp()
   const [items, setItems] = useState([])
   const [units, setUnits] = useState([])
   const [techniques, setTechniques] = useState([])
+  const [labourRates, setLabourRates] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterCat, setFilterCat] = useState('ALL')
@@ -26,14 +28,16 @@ export default function CostsPage() {
   async function load() {
     setLoading(true)
     try {
-      const [costs, uoms, techs] = await Promise.all([
+      const [costs, uoms, techs, labour] = await Promise.all([
         getCostItems(),
         supabase.from('units_of_measure').select('*').order('name').then(r => r.data ?? []),
-        getPrintTechniques()
+        getPrintTechniques(),
+        getLabourRates()
       ])
       setItems(costs)
       setUnits(uoms)
       setTechniques(techs)
+      setLabourRates(labour.filter(r => r.active))
     } finally { setLoading(false) }
   }
 
@@ -42,7 +46,12 @@ export default function CostsPage() {
   function openNew() { setEditing(null); setForm({ ...empty, technique_ids: techniques.map(t => t.id) }); setModal(true) }
   function openEdit(item) {
     setEditing(item)
-    setForm({ ...item, value_per_unit: String(item.value_per_unit), technique_ids: item.technique_ids ?? [] })
+    setForm({
+      ...item,
+      value_per_unit: String(item.value_per_unit),
+      technique_ids: item.technique_ids ?? [],
+      labour_rate_id: item.labour_rate_id ?? '',
+    })
     setModal(true)
   }
 
@@ -66,15 +75,20 @@ export default function CostsPage() {
     if (!form.name || !form.unit || !form.category) return
     setSaving(true)
     try {
+      const linkedRate = labourRates.find(r => r.id === form.labour_rate_id)
+      const value_per_unit = linkedRate
+        ? parseFloat(linkedRate.cost_per_hour) / 60
+        : parseFloat(form.value_per_unit) || 0
       await upsertCostItem({
         ...(editing ? { id: editing.id } : {}),
         name: form.name,
         unit: form.unit,
         category: form.category,
-        value_per_unit: parseFloat(form.value_per_unit) || 0,
+        value_per_unit,
         value_type: form.value_type ?? 'nominal',
         active: form.active,
         technique_ids: form.technique_ids,
+        labour_rate_id: form.labour_rate_id || null,
       })
       setModal(false)
       setToast({ message: T('saved'), type: 'success' })
@@ -128,6 +142,7 @@ export default function CostsPage() {
                 <th className="text-left px-5 py-3">{T('name')}</th>
                 <th className="text-left px-4 py-3">{T('unit')}</th>
                 <th className="text-left px-4 py-3">{T('category')}</th>
+                <th className="text-left px-4 py-3">Cost type</th>
                 <th className="text-left px-4 py-3">Techniques</th>
                 <th className="text-right px-4 py-3">{T('value_per_unit')}</th>
                 <th className="text-center px-4 py-3">{T('active')}</th>
@@ -140,6 +155,11 @@ export default function CostsPage() {
                   <td className="px-5 py-3 font-medium text-gray-900">{item.name}</td>
                   <td className="px-4 py-3 text-gray-500">{item.unit}</td>
                   <td className="px-4 py-3"><CategoryBadge category={item.category} /></td>
+                  <td className="px-4 py-3">
+                    {item.category === 'LANDED'
+                      ? <span className="text-xs text-gray-300">—</span>
+                      : <Badge color={costType(item.category) === 'FIX' ? 'amber' : 'emerald'}>{costType(item.category)}</Badge>}
+                  </td>
                   <td className="px-4 py-3 text-xs text-gray-400">
                     {!item.technique_ids?.length
                       ? 'All'
@@ -148,7 +168,9 @@ export default function CostsPage() {
                   <td className="px-4 py-3 text-right font-mono text-gray-700">
                     {item.value_type === 'percentage_of_fob'
                       ? <span className="text-xs bg-violet-50 text-violet-700 px-2 py-0.5 rounded-lg">{item.value_per_unit}% of FOB</span>
-                      : fmt(item.value_per_unit)
+                      : item.labour_rates
+                        ? <span title={`From labour rate: ${item.labour_rates.skill} / ${item.labour_rates.experience_level}`}>{fmt(effectiveRate(item))}*</span>
+                        : fmt(item.value_per_unit)
                     }
                   </td>
                   <td className="px-4 py-3 text-center">
@@ -197,17 +219,44 @@ export default function CostsPage() {
                 ))}
               </select>
             </div>
-            <Select label={T('category')} value={form.category}
-              onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
-              {CATEGORIES.map(c => <option key={c} value={c}>{T(c)}</option>)}
-            </Select>
+            <div className="flex flex-col gap-1">
+              <Select label={T('category')} value={form.category}
+                onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
+                {CATEGORIES.map(c => <option key={c} value={c}>{T(c)}</option>)}
+              </Select>
+              {form.category !== 'LANDED' && (
+                <span className="text-xs text-gray-400">
+                  Cost type: <span className="font-medium text-gray-600">{costType(form.category)}</span>
+                </span>
+              )}
+            </div>
           </div>
+
+          {!isPct && form.category !== 'LANDED' && (
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-600">Link to labour rate (optional)</label>
+              <select value={form.labour_rate_id}
+                onChange={e => setForm(f => ({ ...f, labour_rate_id: e.target.value }))}
+                className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900">
+                <option value="">— none, use manual value below —</option>
+                {labourRates.map(r => (
+                  <option key={r.id} value={r.id}>{r.skill} · {r.experience_level} ({fmt(r.cost_per_hour)}/h)</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-400">
+                When linked, the cost/unit is always (labour €/hour ÷ 60) and updates automatically if the labour rate changes.
+              </p>
+            </div>
+          )}
 
           <Input
             label={isPct ? 'Rate (% of FOB)' : T('value_per_unit')}
             type="number" step="0.0001" min="0"
-            value={form.value_per_unit}
+            value={form.labour_rate_id
+              ? ((labourRates.find(r => r.id === form.labour_rate_id)?.cost_per_hour || 0) / 60).toFixed(4)
+              : form.value_per_unit}
             onChange={e => setForm(f => ({ ...f, value_per_unit: e.target.value }))}
+            disabled={!!form.labour_rate_id}
           />
           {isPct && (
             <p className="text-xs text-gray-400">
