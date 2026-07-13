@@ -53,6 +53,11 @@ export async function signOut() {
   if (error) throw error
 }
 
+export async function getAccessToken() {
+  const { data: { session } } = await _client.auth.getSession()
+  return session?.access_token ?? null
+}
+
 export async function getCurrentProfile() {
   const { data: { user } } = await _client.auth.getUser()
   if (!user) return null

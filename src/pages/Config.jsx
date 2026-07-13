@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { updateInstanceConfig } from '../lib/supabase'
 import { useApp } from '../lib/AppContext'
 import { Input, Select, Btn, Toast, PageHeader, Modal, Badge } from '../components/ui'
-import { getUsers, updateUserRole } from '../lib/supabase'
+import { getUsers, updateUserRole, getAccessToken } from '../lib/supabase'
 import { Plus, KeyRound } from 'lucide-react'
 
 // ── Config Page ───────────────────────────────────────────────
@@ -111,9 +111,10 @@ export function UsersPage() {
     if (!inviteEmail) return
     setInviting(true)
     try {
+      const token = await getAccessToken()
       const res = await fetch('/api/invite-user', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ email: inviteEmail, role: inviteRole })
       })
       const data = await res.json()
@@ -136,9 +137,10 @@ export function UsersPage() {
     }
     setSavingPw(true)
     try {
+      const token = await getAccessToken()
       const res = await fetch('/api/update-user-password', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ userId: pwModal.id, password: newPassword })
       })
       const data = await res.json()
