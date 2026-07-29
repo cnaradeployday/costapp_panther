@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react'
 import { Plus, Pencil, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import {
   getProducts, upsertProduct, deleteProduct,
-  getCostItems, upsertProductCost, deleteProductCost
+  getCostItems, upsertProductCost, deleteProductCost, getPrintTechniques
 } from '../lib/supabase'
 import { useApp } from '../lib/AppContext'
 import { Modal, Confirm, Toast, Btn, Input, Select, EmptyState, PageHeader, SearchInput, Toggle } from '../components/ui'
 
-const empty = { sku: '', name: '', ncm: '', origin_country: '', fob_price: '', weight_kg: '', length_cm: '', width_cm: '', height_cm: '', hs_code_id: '', active: true }
+const empty = { sku: '', name: '', ncm: '', origin_country: '', fob_price: '', weight_kg: '', length_cm: '', width_cm: '', height_cm: '', hs_code_id: '', active: true, technique_ids: [] }
 
 const EU_COUNTRIES = ['AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','DE','GR','HU','IE','IT','LV','LT','LU','MT','NL','PL','PT','RO','SK','SI','ES','SE']
 
@@ -28,6 +28,7 @@ export default function ProductsPage() {
   const [products, setProducts] = useState([])
   const [landedCosts, setLandedCosts] = useState([])
   const [hsCodes, setHsCodes] = useState([])
+  const [techniques, setTechniques] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState(null)
@@ -44,16 +45,17 @@ export default function ProductsPage() {
   async function load() {
     setLoading(true)
     try {
-      const [prods, costs, hs] = await Promise.all([getProducts(), getCostItems('LANDED'), getHsCodes()])
+      const [prods, costs, hs, techs] = await Promise.all([getProducts(), getCostItems('LANDED'), getHsCodes(), getPrintTechniques()])
       setProducts(prods)
       setLandedCosts(costs.filter(c => c.active))
       setHsCodes(hs)
+      setTechniques(techs.filter(t => t.active))
     } finally { setLoading(false) }
   }
 
   useEffect(() => { load() }, [tabVisible])
 
-  function openNew() { setEditing(null); setForm(empty); setModal(true) }
+  function openNew() { setEditing(null); setForm({ ...empty, technique_ids: techniques.map(t => t.id) }); setModal(true) }
   function openEdit(p) {
     setEditing(p)
     setForm({
@@ -64,9 +66,26 @@ export default function ProductsPage() {
       width_cm: p.width_cm ? String(p.width_cm) : '',
       height_cm: p.height_cm ? String(p.height_cm) : '',
       hs_code_id: p.hs_code_id ?? '',
-      active: p.active
+      active: p.active,
+      technique_ids: p.technique_ids ?? [],
     })
     setModal(true)
+  }
+
+  function toggleTechnique(id) {
+    setForm(f => ({
+      ...f,
+      technique_ids: f.technique_ids.includes(id)
+        ? f.technique_ids.filter(x => x !== id)
+        : [...f.technique_ids, id]
+    }))
+  }
+
+  function toggleAllTechniques() {
+    setForm(f => ({
+      ...f,
+      technique_ids: f.technique_ids.length === techniques.length ? [] : techniques.map(t => t.id)
+    }))
   }
 
   async function handleSave() {
@@ -83,6 +102,7 @@ export default function ProductsPage() {
         height_cm: parseFloat(form.height_cm) || 0,
         hs_code_id: form.hs_code_id || null,
         active: form.active,
+        technique_ids: form.technique_ids,
       })
       setModal(false)
       setToast({ message: T('saved'), type: 'success' })
@@ -220,6 +240,13 @@ export default function ProductsPage() {
 
                 {isOpen && (
                   <div className="border-t border-gray-50 px-5 py-4">
+                    <p className="text-xs text-gray-400 mb-4">
+                      Print techniques: <span className="text-gray-600 font-medium">
+                        {!prod.technique_ids?.length
+                          ? 'All'
+                          : techniques.filter(t => prod.technique_ids.includes(t.id)).map(t => t.name).join(', ') || '—'}
+                      </span>
+                    </p>
                     {/* Import duty automático */}
                     {hs && (
                       <div className={`mb-4 rounded-xl px-4 py-3 flex items-center gap-3 ${duty?.isEu ? 'bg-emerald-50' : 'bg-amber-50'}`}>
@@ -385,6 +412,31 @@ export default function ProductsPage() {
                 Volume: {((parseFloat(form.length_cm)||0) * (parseFloat(form.width_cm)||0) * (parseFloat(form.height_cm)||0) / 1_000_000).toFixed(6)} m³
               </p>
             )}
+          </div>
+
+          {/* Técnicas habilitadas */}
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-gray-600">Enabled print techniques</label>
+              {techniques.length > 0 && (
+                <button type="button" onClick={toggleAllTechniques}
+                  className="text-xs font-medium text-slate-600 hover:text-slate-900">
+                  {form.technique_ids.length === techniques.length ? 'Deselect all' : 'Select all'}
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-gray-400 -mt-0.5 mb-1">Leave empty to allow all techniques in the Calculator.</p>
+            <div className="flex flex-wrap gap-2 border border-gray-200 rounded-lg p-3 max-h-40 overflow-y-auto">
+              {techniques.length === 0 ? (
+                <span className="text-xs text-gray-400">No techniques yet</span>
+              ) : techniques.map(t => (
+                <label key={t.id} className="flex items-center gap-1.5 text-xs text-gray-700 bg-gray-50 rounded-lg px-2 py-1 cursor-pointer">
+                  <input type="checkbox" checked={form.technique_ids.includes(t.id)}
+                    onChange={() => toggleTechnique(t.id)} />
+                  {t.name}
+                </label>
+              ))}
+            </div>
           </div>
 
           <div className="flex items-center gap-3">

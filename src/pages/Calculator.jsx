@@ -72,6 +72,12 @@ export default function CalculatorPage() {
   function toggleTech(id) {
     setSelectedTechIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
+  function selectProduct(id) {
+    setProductId(id)
+    const p = products.find(x => x.id === id)
+    const allowed = p?.technique_ids?.length ? p.technique_ids : null
+    if (allowed) setSelectedTechIds(prev => prev.filter(x => allowed.includes(x)))
+  }
   function addBreak() {
     const qty = parseInt(newBreakQty)
     if (!qty || qty <= 0 || activeBreaks.includes(qty)) return
@@ -81,7 +87,10 @@ export default function CalculatorPage() {
   function removeBreak(qty) { setActiveBreaks(prev => prev.filter(q => q !== qty)) }
 
   const product = products.find(p => p.id === productId)
-  const selTechs = techniques.filter(t => selectedTechIds.includes(t.id))
+  const availableTechs = product?.technique_ids?.length
+    ? techniques.filter(t => product.technique_ids.includes(t.id))
+    : techniques
+  const selTechs = availableTechs.filter(t => selectedTechIds.includes(t.id))
 
   const rows = product ? activeBreaks.map(qty => {
     const { fob, additions, landedUnit } = calcLandedUnit(product)
@@ -179,7 +188,7 @@ export default function CalculatorPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-5">
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-gray-600">{T('select_product')}</label>
-            <select value={productId} onChange={e => setProductId(e.target.value)}
+            <select value={productId} onChange={e => selectProduct(e.target.value)}
               className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white">
               <option value="">— select product —</option>
               {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>)}
@@ -204,9 +213,17 @@ export default function CalculatorPage() {
           </div>
         </div>
         <div>
-          <p className="text-xs font-medium text-gray-600 mb-2">{T('select_techniques')}</p>
+          <p className="text-xs font-medium text-gray-600 mb-2">
+            {T('select_techniques')}
+            {product?.technique_ids?.length > 0 && (
+              <span className="text-gray-400 font-normal ml-1">(filtered for {product.name})</span>
+            )}
+          </p>
           <div className="flex flex-wrap gap-2">
-            {techniques.map(tech => (
+            {availableTechs.length === 0 && (
+              <span className="text-xs text-gray-400">No techniques enabled for this product</span>
+            )}
+            {availableTechs.map(tech => (
               <button key={tech.id} onClick={() => toggleTech(tech.id)}
                 className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-all border ${
                   selectedTechIds.includes(tech.id)
