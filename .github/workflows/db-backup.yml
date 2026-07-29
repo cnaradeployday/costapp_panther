@@ -1,0 +1,53 @@
+name: Daily Database Backup
+
+on:
+  schedule:
+    - cron: '0 4 * * *' # 04:00 UTC every day
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Set backup variables
+        id: vars
+        run: |
+          DATE=$(date +%Y-%m-%d)
+          echo "date=$DATE" >> "$GITHUB_OUTPUT"
+          echo "filename=backup-$DATE.sql.gz" >> "$GITHUB_OUTPUT"
+          echo "tag=backup-$DATE-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Dump database
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::SUPABASE_DB_URL secret is not set. Add it in repo Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          pg_dump "$DATABASE_URL" --no-owner --no-privileges | gzip > "${{ steps.vars.outputs.filename }}"
+
+      - name: Upload backup as a GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: "DB Backup ${{ steps.vars.outputs.date }}"
+          body: "Automated daily backup of the cost_app Supabase database."
+          files: ${{ steps.vars.outputs.filename }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete old backups (keep last 30)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release list --repo "${{ github.repository }}" --limit 200 \
+            | awk -F'\t' '$3 ~ /^backup-/ {print $3}' \
+            | tail -n +31 \
+            | xargs -r -n1 gh release delete --yes --cleanup-tag --repo "${{ github.repository }}"
