@@ -25,20 +25,21 @@ export function lineTotal(tc) {
   return min !== null ? Math.max(raw, min) : raw
 }
 
-// The company's general margin — the lowest configured margin tier — used as the
-// fallback whenever a technique cost line has no margin_pct override of its own.
-export function defaultMarginPct(tiers) {
+// The company's general markup — the lowest configured margin tier — used as the
+// fallback whenever a technique cost line has no markup_pct override of its own.
+export function defaultMarkupPct(tiers) {
   if (!tiers?.length) return 0
   const lowest = [...tiers].sort((a, b) => parseFloat(a.qty_from) - parseFloat(b.qty_from))[0]
   return parseFloat(lowest.margin_pct) || 0
 }
 
-export function effectiveMarginPct(tc, tiers) {
-  return tc.margin_pct !== null && tc.margin_pct !== undefined && tc.margin_pct !== ''
-    ? parseFloat(tc.margin_pct)
-    : defaultMarginPct(tiers)
+export function effectiveMarkupPct(tc, tiers) {
+  return tc.markup_pct !== null && tc.markup_pct !== undefined && tc.markup_pct !== ''
+    ? parseFloat(tc.markup_pct)
+    : defaultMarkupPct(tiers)
 }
 
-export function sellPrice(cost, marginPct) {
-  return marginPct > 0 ? cost / (1 - marginPct / 100) : cost
+// Markup: sell price = cost plus a percentage of cost (sell = cost × (1 + pct/100)).
+export function sellPrice(cost, markupPct) {
+  return markupPct > 0 ? cost * (1 + markupPct / 100) : cost
 }

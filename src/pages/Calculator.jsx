@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react'
+import * as XLSX from 'xlsx'
 import { getProducts, getPrintTechniques, getMarginTiers, getQtyBreaks } from '../lib/supabase'
 import { useApp } from '../lib/AppContext'
-import { lineTotal, defaultMarginPct, effectiveMarginPct, sellPrice, costType } from '../lib/techniqueCosts'
+import { lineTotal, defaultMarkupPct, effectiveMarkupPct, sellPrice, costType } from '../lib/techniqueCosts'
 import { Toast } from '../components/ui'
-import { Calculator, FileSpreadsheet, FileText, Plus, X } from 'lucide-react'
+import { Calculator, FileSpreadsheet, FileText, Plus, X, ChevronUp, ChevronDown, GripVertical, Columns3 } from 'lucide-react'
+
+const COL_ORDER_KEY = 'calcColOrder'
+const COL_HIDDEN_KEY = 'calcHiddenCols'
 
 function calcLandedUnit(product) {
   const fob = parseFloat(product.fob_price) || 0
@@ -26,8 +30,8 @@ function lineUnitCost(tc, qty) {
   return tc.category === 'HIT' ? total : total / qty
 }
 
-// Each technique cost line carries its own margin (defaulting to the company's
-// general margin when not overridden) — sell price is built up line by line,
+// Each technique cost line carries its own markup (defaulting to the company's
+// general markup when not overridden) — sell price is built up line by line,
 // and every line stays visible instead of being collapsed into ORIG/HIT sums,
 // so the cost breakdown shown here always matches the lines set up in Techniques.
 function calcPrintUnit(tech, qty, tiers) {
@@ -35,14 +39,14 @@ function calcPrintUnit(tech, qty, tiers) {
 
   const lines = costLines.map(tc => {
     const unitCost = lineUnitCost(tc, qty)
-    const marginPct = effectiveMarginPct(tc, tiers)
+    const markupPct = effectiveMarkupPct(tc, tiers)
     return {
       id: tc.id,
       name: tc.cost_items?.name ?? '—',
       category: tc.category,
       unitCost,
-      sellUnit: sellPrice(unitCost, marginPct),
-      marginPct,
+      sellUnit: sellPrice(unitCost, markupPct),
+      markupPct,
     }
   })
 
@@ -63,6 +67,16 @@ export default function CalculatorPage() {
   const [activeBreaks, setActiveBreaks] = useState([])
   const [newBreakQty, setNewBreakQty] = useState('')
   const [toast, setToast] = useState(null)
+  const [colOrder, setColOrder] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(COL_ORDER_KEY)) ?? [] } catch { return [] }
+  })
+  const [hiddenCols, setHiddenCols] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(COL_HIDDEN_KEY)) ?? [] } catch { return [] }
+  })
+  const [dragColKey, setDragColKey] = useState(null)
+  const [sortKey, setSortKey] = useState(null)
+  const [sortDir, setSortDir] = useState('asc')
+  const [showColMenu, setShowColMenu] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -112,23 +126,77 @@ export default function CalculatorPage() {
     const printSellTotal = techs.reduce((s, t) => s + t.sellUnit, 0)
     const costUnit = landedUnit + printTotal
     const costTotal = costUnit * qty
-    const landedSellUnit = sellPrice(landedUnit, defaultMarginPct(tiers))
+    const landedSellUnit = sellPrice(landedUnit, defaultMarkupPct(tiers))
     const sellUnit = landedSellUnit + printSellTotal
     const sellTotal = sellUnit * qty
-    const marginPct = costUnit > 0 ? ((sellUnit - costUnit) / costUnit) * 100 : 0
-    return { qty, fob, additions, landedUnit, techs, printTotal, costUnit, costTotal, marginPct, sellUnit, sellTotal }
+    const markupPct = costUnit > 0 ? ((sellUnit - costUnit) / costUnit) * 100 : 0
+    return { qty, fob, additions, landedUnit, techs, printTotal, costUnit, costTotal, markupPct, sellUnit, sellTotal }
   }) : []
+
+  // Column set depends on which techniques/cost lines are selected, so it's rebuilt
+  // whenever that changes; user-chosen order/visibility (by key) survives that.
+  const columns = [
+    { key: 'qty', label: 'QTY', get: r => r.qty, format: v => v.toLocaleString(), cellClass: 'font-semibold text-gray-900' },
+    { key: 'fob', label: 'FOB', get: r => r.fob, format: fmt, cellClass: 'font-mono text-gray-400 text-xs' },
+    { key: 'landed', label: 'Landed', get: r => r.landedUnit, format: fmt, cellClass: 'font-mono text-blue-600 text-xs' },
+    ...selTechs.flatMap(t => (t.technique_costs ?? []).map(tc => ({
+      key: `line_${tc.id}`,
+      label: (selTechs.length > 1 ? `${t.name} — ` : '') + (tc.cost_items?.name ?? '—'),
+      get: r => r.techs.find(rt => rt.id === t.id)?.lines.find(l => l.id === tc.id)?.unitCost ?? 0,
+      format: fmt,
+      headerClass: costType(tc.category) === 'FIX' ? 'text-amber-500' : 'text-emerald-500',
+      cellClass: `font-mono text-xs ${costType(tc.category) === 'FIX' ? 'text-amber-600' : 'text-emerald-600'}`,
+    }))),
+    { key: 'costUnit', label: 'Cost unit', get: r => r.costUnit, format: fmt, cellClass: 'font-mono text-gray-700 text-xs font-semibold' },
+    { key: 'costTotal', label: 'Cost total', get: r => r.costTotal, format: fmt, cellClass: 'font-mono text-gray-500 text-xs' },
+    { key: 'markup', label: 'Markup', get: r => r.markupPct, format: v => v.toFixed(1) + '%', isBadge: true },
+    { key: 'sellUnit', label: 'Sell unit', get: r => r.sellUnit, format: fmt, cellClass: 'font-mono text-gray-700 text-xs' },
+    { key: 'sellTotal', label: 'Sell total', get: r => r.sellTotal, format: fmt, cellClass: 'font-mono font-semibold text-slate-900' },
+  ]
+  const colByKey = Object.fromEntries(columns.map(c => [c.key, c]))
+  const orderedKeys = [
+    ...colOrder.filter(k => colByKey[k]),
+    ...columns.map(c => c.key).filter(k => !colOrder.includes(k)),
+  ]
+  const visibleColumns = orderedKeys.map(k => colByKey[k]).filter(c => !hiddenCols.includes(c.key))
+
+  const sortedRows = sortKey
+    ? [...rows].sort((a, b) => ((colByKey[sortKey]?.get(a) ?? 0) - (colByKey[sortKey]?.get(b) ?? 0)) * (sortDir === 'asc' ? 1 : -1))
+    : rows
+
+  function persistColOrder(order) {
+    setColOrder(order)
+    localStorage.setItem(COL_ORDER_KEY, JSON.stringify(order))
+  }
+  function toggleColHidden(key) {
+    setHiddenCols(prev => {
+      const next = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+      localStorage.setItem(COL_HIDDEN_KEY, JSON.stringify(next))
+      return next
+    })
+  }
+  function handleColDrop(targetKey) {
+    if (!dragColKey || dragColKey === targetKey) { setDragColKey(null); return }
+    const keys = orderedKeys.filter(k => k !== dragColKey)
+    const targetIdx = keys.indexOf(targetKey)
+    keys.splice(targetIdx, 0, dragColKey)
+    persistColOrder(keys)
+    setDragColKey(null)
+  }
+  function toggleSort(key) {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('asc') }
+  }
 
   async function exportExcel() {
     if (!product || !rows.length) return
     try {
-      const { default: XLSX } = await import('xlsx')
       const cur = config?.currency_code ?? ''
 
       const headers = [
         'QTY', 'FOB', 'Landed',
         ...lineHeaders,
-        'Cost unit', 'Cost total', 'Margin %', 'Sell unit', 'Sell total'
+        'Cost unit', 'Cost total', 'Markup %', 'Sell unit', 'Sell total'
       ]
 
       const data = rows.map(r => [
@@ -138,7 +206,7 @@ export default function CalculatorPage() {
         ...r.techs.flatMap(t => t.lines.map(l => l.unitCost.toFixed(4))),
         r.costUnit.toFixed(4),
         r.costTotal.toFixed(2),
-        r.marginPct.toFixed(1) + '%',
+        r.markupPct.toFixed(1) + '%',
         r.sellUnit.toFixed(4),
         r.sellTotal.toFixed(2),
       ])
@@ -173,7 +241,7 @@ export default function CalculatorPage() {
 
       autoTable(doc, {
         startY: 32,
-        head: [['QTY', 'FOB', 'Landed', ...lineHeaders, 'Cost unit', 'Cost total', 'Margin', 'Sell unit', 'Sell total']],
+        head: [['QTY', 'FOB', 'Landed', ...lineHeaders, 'Cost unit', 'Cost total', 'Markup', 'Sell unit', 'Sell total']],
         body: rows.map(r => [
           r.qty,
           `${cur} ${r.fob.toFixed(4)}`,
@@ -181,7 +249,7 @@ export default function CalculatorPage() {
           ...r.techs.flatMap(t => t.lines.map(l => `${cur} ${l.unitCost.toFixed(4)}`)),
           `${cur} ${r.costUnit.toFixed(4)}`,
           `${cur} ${r.costTotal.toFixed(2)}`,
-          `${r.marginPct.toFixed(1)}%`,
+          `${r.markupPct.toFixed(1)}%`,
           `${cur} ${r.sellUnit.toFixed(4)}`,
           `${cur} ${r.sellTotal.toFixed(2)}`,
         ]),
@@ -266,9 +334,25 @@ export default function CalculatorPage() {
               <h2 className="text-sm font-semibold text-gray-900">
                 {product.name} <span className="text-gray-400 font-normal text-xs ml-1">{product.sku}</span>
               </h2>
-              <p className="text-xs text-gray-400 mt-0.5">Margin applied per cost line (set in Techniques → Margin %)</p>
+              <p className="text-xs text-gray-400 mt-0.5">Markup applied per cost line (set in Techniques → Markup %)</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 relative">
+              <button onClick={() => setShowColMenu(v => !v)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">
+                <Columns3 size={13}/> Columns
+              </button>
+              {showColMenu && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setShowColMenu(false)} />
+                  <div className="absolute right-0 top-9 z-20 bg-white border border-gray-200 rounded-xl shadow-lg py-2 w-56 max-h-72 overflow-y-auto">
+                    {columns.map(c => (
+                      <label key={c.key} className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 cursor-pointer">
+                        <input type="checkbox" checked={!hiddenCols.includes(c.key)} onChange={() => toggleColHidden(c.key)} />
+                        {c.label}
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
               <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">
                 <FileSpreadsheet size={13}/> Excel
               </button>
@@ -282,39 +366,33 @@ export default function CalculatorPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 text-xs text-gray-400 font-medium uppercase tracking-wider">
-                  <th className="text-right px-4 py-3">QTY</th>
-                  <th className="text-right px-3 py-3">FOB</th>
-                  <th className="text-right px-3 py-3">Landed</th>
-                  {selTechs.flatMap(t => (t.technique_costs ?? []).map(tc => (
-                    <th key={tc.id} className={`text-right px-3 py-3 ${costType(tc.category) === 'FIX' ? 'text-amber-500' : 'text-emerald-500'}`}>
-                      {selTechs.length > 1 ? `${t.name} — ` : ''}{tc.cost_items?.name ?? '—'}
+                  {visibleColumns.map(c => (
+                    <th key={c.key}
+                      draggable
+                      onDragStart={() => setDragColKey(c.key)}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={() => handleColDrop(c.key)}
+                      onClick={() => toggleSort(c.key)}
+                      className={`text-right px-3 py-3 cursor-pointer select-none hover:text-gray-600 ${c.headerClass ?? ''} ${dragColKey === c.key ? 'opacity-40' : ''}`}>
+                      <span className="inline-flex items-center gap-1 justify-end">
+                        <GripVertical size={11} className="text-gray-300"/>
+                        {c.label}
+                        {sortKey === c.key && (sortDir === 'asc' ? <ChevronUp size={12}/> : <ChevronDown size={12}/>)}
+                      </span>
                     </th>
-                  )))}
-                  <th className="text-right px-3 py-3">Cost unit</th>
-                  <th className="text-right px-3 py-3">Cost total</th>
-                  <th className="text-right px-3 py-3">Margin</th>
-                  <th className="text-right px-3 py-3">Sell unit</th>
-                  <th className="text-right px-4 py-3 text-slate-900">Sell total</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r, i) => (
-                  <tr key={r.qty} className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${i === rows.length - 1 ? 'border-0' : ''}`}>
-                    <td className="text-right px-4 py-3 font-semibold text-gray-900">{r.qty.toLocaleString()}</td>
-                    <td className="text-right px-3 py-3 font-mono text-gray-400 text-xs">{fmt(r.fob)}</td>
-                    <td className="text-right px-3 py-3 font-mono text-blue-600 text-xs">{fmt(r.landedUnit)}</td>
-                    {r.techs.flatMap(t => t.lines.map(l => (
-                      <td key={l.id} className={`text-right px-3 py-3 font-mono text-xs ${costType(l.category) === 'FIX' ? 'text-amber-600' : 'text-emerald-600'}`}>
-                        {fmt(l.unitCost)}
+                {sortedRows.map((r, i) => (
+                  <tr key={r.qty} className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${i === sortedRows.length - 1 ? 'border-0' : ''}`}>
+                    {visibleColumns.map(c => (
+                      <td key={c.key} className={`text-right px-3 py-3 ${c.cellClass ?? ''}`}>
+                        {c.isBadge
+                          ? <span className="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-lg font-medium">{c.format(c.get(r))}</span>
+                          : c.format(c.get(r))}
                       </td>
-                    )))}
-                    <td className="text-right px-3 py-3 font-mono text-gray-700 text-xs font-semibold">{fmt(r.costUnit)}</td>
-                    <td className="text-right px-3 py-3 font-mono text-gray-500 text-xs">{fmt(r.costTotal)}</td>
-                    <td className="text-right px-3 py-3">
-                      <span className="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-lg font-medium">{r.marginPct.toFixed(1)}%</span>
-                    </td>
-                    <td className="text-right px-3 py-3 font-mono text-gray-700 text-xs">{fmt(r.sellUnit)}</td>
-                    <td className="text-right px-4 py-3 font-mono font-semibold text-slate-900">{fmt(r.sellTotal)}</td>
+                    ))}
                   </tr>
                 ))}
               </tbody>
