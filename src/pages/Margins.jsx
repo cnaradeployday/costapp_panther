@@ -65,14 +65,7 @@ export default function MarginsPage() {
     }
     setSavingBreak(true)
     try {
-      const inserted = await upsertQtyBreak({ quantity: qty, is_default: true, sort_order: breaks.length + 1 })
-      // re-sequence sort_order to match ascending quantity order
-      const sorted = [...breaks, inserted].sort((a, b) => a.quantity - b.quantity)
-      const updates = sorted
-        .map((b, i) => ({ b, sort_order: i + 1 }))
-        .filter(({ b, sort_order }) => b.sort_order !== sort_order)
-        .map(({ b, sort_order }) => upsertQtyBreak({ ...b, sort_order }))
-      await Promise.all(updates)
+      await upsertQtyBreak({ quantity: qty, is_default: true, sort_order: breaks.length + 1 })
       setBreakForm({ quantity: '' })
       setToast({ message: 'Saved', type: 'success' })
       await load()

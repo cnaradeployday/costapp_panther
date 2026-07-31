@@ -255,7 +255,7 @@ export async function getQtyBreaks() {
   const { data, error } = await _client
     .from('qty_breaks')
     .select('*')
-    .order('sort_order')
+    .order('quantity')
   if (error) throw error
   return data
 }
