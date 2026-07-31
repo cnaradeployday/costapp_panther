@@ -179,21 +179,26 @@ export default function ProductsPage() {
     return l * w * h / 1_000_000
   }
 
-  function handleExport() {
-    exportToExcel('products.xlsx', 'Products',
-      [T('sku'), T('name'), T('origin_country'), T('fob_price'), 'Weight (kg)', 'Volume (m³)', 'HS code', 'Landed total', T('active')],
-      filtered.map(prod => {
-        const fob = parseFloat(prod.fob_price) || 0
-        const totalLanded = prod.product_costs?.reduce((s, pc) => s + getEffectiveValue(pc, fob), 0) ?? 0
-        const duty = calcImportDuty(prod)
-        const hs = hsCodes.find(h => h.id === prod.hs_code_id)
-        return [
-          prod.sku, prod.name, prod.origin_country || '', fob.toFixed(4),
-          prod.weight_kg || 0, volM3(prod).toFixed(6), hs?.code || '',
-          (fob + totalLanded + (duty?.amount || 0)).toFixed(4),
-          prod.active ? 'Yes' : 'No',
-        ]
-      }))
+  async function handleExport() {
+    try {
+      await exportToExcel('products.xlsx', 'Products',
+        [T('sku'), T('name'), T('origin_country'), T('fob_price'), 'Weight (kg)', 'Volume (m³)', 'HS code', 'Landed total', T('active')],
+        filtered.map(prod => {
+          const fob = parseFloat(prod.fob_price) || 0
+          const totalLanded = prod.product_costs?.reduce((s, pc) => s + getEffectiveValue(pc, fob), 0) ?? 0
+          const duty = calcImportDuty(prod)
+          const hs = hsCodes.find(h => h.id === prod.hs_code_id)
+          return [
+            prod.sku, prod.name, prod.origin_country || '', fob.toFixed(4),
+            prod.weight_kg || 0, volM3(prod).toFixed(6), hs?.code || '',
+            (fob + totalLanded + (duty?.amount || 0)).toFixed(4),
+            prod.active ? 'Yes' : 'No',
+          ]
+        }))
+    } catch (e) {
+      console.error('Excel export error:', e)
+      setToast({ message: T('error'), type: 'error' })
+    }
   }
 
   return (

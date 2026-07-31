@@ -164,8 +164,13 @@ export function UsersPage() {
 
   const roleColors = { superadmin: 'violet', admin: 'amber', user: 'gray' }
 
-  function handleExport() {
-    exportToExcel('users.xlsx', 'Users', ['Email', T('role')], users.map(u => [u.email, u.role]))
+  async function handleExport() {
+    try {
+      await exportToExcel('users.xlsx', 'Users', ['Email', T('role')], users.map(u => [u.email, u.role]))
+    } catch (e) {
+      console.error('Excel export error:', e)
+      setToast({ message: T('error'), type: 'error' })
+    }
   }
 
   return (

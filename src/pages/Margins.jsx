@@ -81,13 +81,18 @@ export default function MarginsPage() {
     } catch { setToast({ message: 'Error', type: 'error' }) }
   }
 
-  function handleExport() {
-    exportToExcel('margins_and_breaks.xlsx', 'Margins & Breaks',
-      ['Type', 'Order value from', 'Up to', 'Margin %', 'Qty break'],
-      [
-        ...tiers.map(t => ['Margin tier', parseFloat(t.qty_from), t.qty_to ? parseFloat(t.qty_to) : '∞', t.margin_pct, '']),
-        ...breaks.map(b => ['Qty break', '', '', '', b.quantity]),
-      ])
+  async function handleExport() {
+    try {
+      await exportToExcel('margins_and_breaks.xlsx', 'Margins & Breaks',
+        ['Type', 'Order value from', 'Up to', 'Margin %', 'Qty break'],
+        [
+          ...tiers.map(t => ['Margin tier', parseFloat(t.qty_from), t.qty_to ? parseFloat(t.qty_to) : '∞', t.margin_pct, '']),
+          ...breaks.map(b => ['Qty break', '', '', '', b.quantity]),
+        ])
+    } catch (e) {
+      console.error('Excel export error:', e)
+      setToast({ message: 'Error', type: 'error' })
+    }
   }
 
   if (loading) return <div className="text-center py-12 text-gray-400 text-sm">Loading...</div>

@@ -71,10 +71,15 @@ export default function HsCodesPage() {
     catch { setToast({ message: 'Cannot delete — in use by a product', type: 'error' }); setConfirm(null) }
   }
 
-  function handleExport() {
-    exportToExcel('hs_codes.xlsx', 'HS Codes',
-      ['HS Code', 'Description', 'Duty rate % (non-EU)', 'Notes', 'Active'],
-      items.map(h => [h.code, h.description, (parseFloat(h.duty_rate) * 100).toFixed(2), h.notes || '', h.active ? 'Yes' : 'No']))
+  async function handleExport() {
+    try {
+      await exportToExcel('hs_codes.xlsx', 'HS Codes',
+        ['HS Code', 'Description', 'Duty rate % (non-EU)', 'Notes', 'Active'],
+        items.map(h => [h.code, h.description, (parseFloat(h.duty_rate) * 100).toFixed(2), h.notes || '', h.active ? 'Yes' : 'No']))
+    } catch (e) {
+      console.error('Excel export error:', e)
+      setToast({ message: 'Error exporting to Excel', type: 'error' })
+    }
   }
 
   return (

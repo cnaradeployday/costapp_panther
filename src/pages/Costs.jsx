@@ -114,16 +114,21 @@ export default function CostsPage() {
   const selectedUnit = units.find(u => u.name === form.unit)
   const isPct = selectedUnit?.type === 'percentage' || form.value_type === 'percentage_of_fob'
 
-  function handleExport() {
-    exportToExcel('cost_items.xlsx', 'Cost Items',
-      [T('name'), T('unit'), T('category'), 'Cost type', 'Techniques', T('value_per_unit'), T('active')],
-      filtered.map(item => [
-        item.name, item.unit, T(item.category),
-        item.category === 'LANDED' ? '—' : costType(item.category),
-        !item.technique_ids?.length ? 'All' : techniques.filter(t => item.technique_ids.includes(t.id)).map(t => t.name).join(', '),
-        item.value_type === 'percentage_of_fob' ? `${item.value_per_unit}% of FOB` : fmt(effectiveRate(item)),
-        item.active ? 'Yes' : 'No',
-      ]))
+  async function handleExport() {
+    try {
+      await exportToExcel('cost_items.xlsx', 'Cost Items',
+        [T('name'), T('unit'), T('category'), 'Cost type', 'Techniques', T('value_per_unit'), T('active')],
+        filtered.map(item => [
+          item.name, item.unit, T(item.category),
+          item.category === 'LANDED' ? '—' : costType(item.category),
+          !item.technique_ids?.length ? 'All' : techniques.filter(t => item.technique_ids.includes(t.id)).map(t => t.name).join(', '),
+          item.value_type === 'percentage_of_fob' ? `${item.value_per_unit}% of FOB` : fmt(effectiveRate(item)),
+          item.active ? 'Yes' : 'No',
+        ]))
+    } catch (e) {
+      console.error('Excel export error:', e)
+      setToast({ message: T('error'), type: 'error' })
+    }
   }
 
   return (

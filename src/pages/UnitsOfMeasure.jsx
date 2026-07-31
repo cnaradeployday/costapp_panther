@@ -60,10 +60,15 @@ export default function UnitsPage() {
     }
   }
 
-  function handleExport() {
-    exportToExcel('units_of_measure.xlsx', 'Units',
-      ['Name', 'Type'],
-      units.map(u => [u.name, u.type === 'percentage' ? '% of FOB' : 'Nominal']))
+  async function handleExport() {
+    try {
+      await exportToExcel('units_of_measure.xlsx', 'Units',
+        ['Name', 'Type'],
+        units.map(u => [u.name, u.type === 'percentage' ? '% of FOB' : 'Nominal']))
+    } catch (e) {
+      console.error('Excel export error:', e)
+      setToast({ message: 'Error exporting to Excel', type: 'error' })
+    }
   }
 
   if (loading) return <div className="text-center py-12 text-gray-400 text-sm">Loading...</div>

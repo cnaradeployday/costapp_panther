@@ -57,18 +57,23 @@ export default function ExchangeRatesPage() {
     return acc
   }, {})
 
-  function handleExport() {
-    const today = new Date().toISOString().split('T')[0]
-    exportToExcel('exchange_rates.xlsx', 'Exchange Rates',
-      ['Pair', 'Rate', 'Valid from', 'Valid to', 'Notes', 'Status'],
-      rates.map(r => [
-        `${r.currency_from}→${r.currency_to}`,
-        parseFloat(r.rate).toFixed(6),
-        r.valid_from,
-        r.valid_to || '',
-        r.notes || '',
-        (r.valid_from <= today && (!r.valid_to || r.valid_to >= today)) ? 'Active' : 'Expired',
-      ]))
+  async function handleExport() {
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      await exportToExcel('exchange_rates.xlsx', 'Exchange Rates',
+        ['Pair', 'Rate', 'Valid from', 'Valid to', 'Notes', 'Status'],
+        rates.map(r => [
+          `${r.currency_from}→${r.currency_to}`,
+          parseFloat(r.rate).toFixed(6),
+          r.valid_from,
+          r.valid_to || '',
+          r.notes || '',
+          (r.valid_from <= today && (!r.valid_to || r.valid_to >= today)) ? 'Active' : 'Expired',
+        ]))
+    } catch (e) {
+      console.error('Excel export error:', e)
+      setToast({ message: 'Error exporting to Excel', type: 'error' })
+    }
   }
 
   return (

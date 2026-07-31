@@ -1,17 +1,9 @@
 import { useEffect, useState } from 'react'
 import { getProducts, getPrintTechniques, getMarginTiers, getQtyBreaks } from '../lib/supabase'
 import { useApp } from '../lib/AppContext'
-import { lineTotal } from '../lib/techniqueCosts'
+import { lineTotal, defaultMarginPct, effectiveMarginPct, sellPrice, costType } from '../lib/techniqueCosts'
+import { Toast } from '../components/ui'
 import { Calculator, FileSpreadsheet, FileText, Plus, X } from 'lucide-react'
-
-function getMargin(tiers, totalOrderValue) {
-  if (!tiers?.length) return 0
-  const tier = tiers.find(t =>
-    totalOrderValue >= parseFloat(t.qty_from) &&
-    (t.qty_to === null || totalOrderValue <= parseFloat(t.qty_to))
-  )
-  return tier ? parseFloat(tier.margin_pct) : 0
-}
 
 function calcLandedUnit(product) {
   const fob = parseFloat(product.fob_price) || 0
@@ -27,20 +19,37 @@ function calcLandedUnit(product) {
   return { fob, additions, landedUnit: fob + additions }
 }
 
-function calcPrintUnit(tech, qty) {
-  const origCosts = tech.technique_costs?.filter(tc => tc.category === 'ORIGINATION' || tc.category === 'QC_PRINT') ?? []
-  const hitCosts  = tech.technique_costs?.filter(tc => tc.category === 'HIT') ?? []
+// FIX costs (Origination, QC_PRINT) are a one-off charge amortized over qty;
+// UNIT costs (HIT) are already a per-piece cost — no amortization needed.
+function lineUnitCost(tc, qty) {
+  const total = lineTotal(tc)
+  return tc.category === 'HIT' ? total : total / qty
+}
 
-  const origTotal = origCosts.reduce((s, tc) => s + lineTotal(tc), 0)
-  const hitUnit = hitCosts.reduce((s, tc) => s + lineTotal(tc), 0)
+// Each technique cost line carries its own margin (defaulting to the company's
+// general margin when not overridden) — sell price is built up line by line,
+// and every line stays visible instead of being collapsed into ORIG/HIT sums,
+// so the cost breakdown shown here always matches the lines set up in Techniques.
+function calcPrintUnit(tech, qty, tiers) {
+  const costLines = tech.technique_costs ?? []
 
-  return {
-    id: tech.id, name: tech.name,
-    origTotal,
-    origUnit: origTotal / qty,
-    hitUnit,
-    total: origTotal / qty + hitUnit
-  }
+  const lines = costLines.map(tc => {
+    const unitCost = lineUnitCost(tc, qty)
+    const marginPct = effectiveMarginPct(tc, tiers)
+    return {
+      id: tc.id,
+      name: tc.cost_items?.name ?? '—',
+      category: tc.category,
+      unitCost,
+      sellUnit: sellPrice(unitCost, marginPct),
+      marginPct,
+    }
+  })
+
+  const total = lines.reduce((s, l) => s + l.unitCost, 0)
+  const sellUnit = lines.reduce((s, l) => s + l.sellUnit, 0)
+
+  return { id: tech.id, name: tech.name, lines, total, sellUnit }
 }
 
 export default function CalculatorPage() {
@@ -53,6 +62,7 @@ export default function CalculatorPage() {
   const [selectedTechIds, setSelectedTechIds] = useState([])
   const [activeBreaks, setActiveBreaks] = useState([])
   const [newBreakQty, setNewBreakQty] = useState('')
+  const [toast, setToast] = useState(null)
 
   async function load() {
     setLoading(true)
@@ -91,87 +101,98 @@ export default function CalculatorPage() {
     ? techniques.filter(t => product.technique_ids.includes(t.id))
     : techniques
   const selTechs = availableTechs.filter(t => selectedTechIds.includes(t.id))
+  const lineHeaders = selTechs.flatMap(t => (t.technique_costs ?? []).map(tc =>
+    selTechs.length > 1 ? `${t.name} — ${tc.cost_items?.name ?? '—'}` : (tc.cost_items?.name ?? '—')
+  ))
 
   const rows = product ? activeBreaks.map(qty => {
     const { fob, additions, landedUnit } = calcLandedUnit(product)
-    const techs = selTechs.map(t => calcPrintUnit(t, qty))
+    const techs = selTechs.map(t => calcPrintUnit(t, qty, tiers))
     const printTotal = techs.reduce((s, t) => s + t.total, 0)
+    const printSellTotal = techs.reduce((s, t) => s + t.sellUnit, 0)
     const costUnit = landedUnit + printTotal
     const costTotal = costUnit * qty
-    const totalOrderValue = costTotal
-    const marginPct = getMargin(tiers, totalOrderValue)
-    const sellUnit = marginPct > 0 ? costUnit / (1 - marginPct / 100) : costUnit
+    const landedSellUnit = sellPrice(landedUnit, defaultMarginPct(tiers))
+    const sellUnit = landedSellUnit + printSellTotal
     const sellTotal = sellUnit * qty
-    return { qty, fob, additions, landedUnit, techs, printTotal, costUnit, costTotal, totalOrderValue, marginPct, sellUnit, sellTotal }
+    const marginPct = costUnit > 0 ? ((sellUnit - costUnit) / costUnit) * 100 : 0
+    return { qty, fob, additions, landedUnit, techs, printTotal, costUnit, costTotal, marginPct, sellUnit, sellTotal }
   }) : []
 
   async function exportExcel() {
     if (!product || !rows.length) return
-    const { default: XLSX } = await import('xlsx')
-    const cur = config?.currency_code ?? ''
+    try {
+      const { default: XLSX } = await import('xlsx')
+      const cur = config?.currency_code ?? ''
 
-    const techHeaders = selTechs.flatMap(t => [`${t.name} Orig.`, `${t.name} HIT`])
-    const headers = [
-      'QTY', 'FOB', 'Landed',
-      ...techHeaders,
-      'Cost unit', 'Cost total', 'Margin %', 'Sell unit', 'Sell total'
-    ]
+      const headers = [
+        'QTY', 'FOB', 'Landed',
+        ...lineHeaders,
+        'Cost unit', 'Cost total', 'Margin %', 'Sell unit', 'Sell total'
+      ]
 
-    const data = rows.map(r => [
-      r.qty,
-      r.fob.toFixed(4),
-      r.landedUnit.toFixed(4),
-      ...r.techs.flatMap(t => [t.origUnit.toFixed(4), t.hitUnit.toFixed(4)]),
-      r.costUnit.toFixed(4),
-      r.costTotal.toFixed(2),
-      r.marginPct + '%',
-      r.sellUnit.toFixed(4),
-      r.sellTotal.toFixed(2),
-    ])
+      const data = rows.map(r => [
+        r.qty,
+        r.fob.toFixed(4),
+        r.landedUnit.toFixed(4),
+        ...r.techs.flatMap(t => t.lines.map(l => l.unitCost.toFixed(4))),
+        r.costUnit.toFixed(4),
+        r.costTotal.toFixed(2),
+        r.marginPct.toFixed(1) + '%',
+        r.sellUnit.toFixed(4),
+        r.sellTotal.toFixed(2),
+      ])
 
-    const ws = XLSX.utils.aoa_to_sheet([
-      [`${product.name} (${product.sku}) — Qty breaks`],
-      [`Currency: ${cur}`], [],
-      headers,
-      ...data
-    ])
-    ws['!cols'] = headers.map(() => ({ wch: 14 }))
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Qty Breaks')
-    XLSX.writeFile(wb, `qtybreaks_${product.sku}.xlsx`)
+      const ws = XLSX.utils.aoa_to_sheet([
+        [`${product.name} (${product.sku}) — Qty breaks`],
+        [`Currency: ${cur}`], [],
+        headers,
+        ...data
+      ])
+      ws['!cols'] = headers.map(() => ({ wch: 14 }))
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Qty Breaks')
+      XLSX.writeFile(wb, `qtybreaks_${product.sku}.xlsx`)
+    } catch (e) {
+      console.error('Excel export error:', e)
+      setToast({ message: 'Could not export to Excel — try reloading the page', type: 'error' })
+    }
   }
 
   async function exportPDF() {
     if (!product || !rows.length) return
-    const { default: jsPDF } = await import('jspdf')
-    const { default: autoTable } = await import('jspdf-autotable')
-    const cur = config?.currency_code ?? ''
-    const doc = new jsPDF({ orientation: 'landscape' })
-    doc.setFontSize(16); doc.setFont('helvetica', 'bold')
-    doc.text(`${product.name} — Qty Breaks`, 14, 18)
-    doc.setFontSize(10); doc.setFont('helvetica', 'normal')
-    doc.text(`${config?.company_name} · ${new Date().toLocaleDateString()}`, 14, 26)
+    try {
+      const { default: jsPDF } = await import('jspdf')
+      const { default: autoTable } = await import('jspdf-autotable')
+      const cur = config?.currency_code ?? ''
+      const doc = new jsPDF({ orientation: 'landscape' })
+      doc.setFontSize(16); doc.setFont('helvetica', 'bold')
+      doc.text(`${product.name} — Qty Breaks`, 14, 18)
+      doc.setFontSize(10); doc.setFont('helvetica', 'normal')
+      doc.text(`${config?.company_name} · ${new Date().toLocaleDateString()}`, 14, 26)
 
-    const techHeaders = selTechs.flatMap(t => [`${t.name} Orig.`, `${t.name} HIT`])
-
-    autoTable(doc, {
-      startY: 32,
-      head: [['QTY', 'FOB', 'Landed', ...techHeaders, 'Cost unit', 'Cost total', 'Margin', 'Sell unit', 'Sell total']],
-      body: rows.map(r => [
-        r.qty,
-        `${cur} ${r.fob.toFixed(4)}`,
-        `${cur} ${r.landedUnit.toFixed(4)}`,
-        ...r.techs.flatMap(t => [`${cur} ${t.origUnit.toFixed(4)}`, `${cur} ${t.hitUnit.toFixed(4)}`]),
-        `${cur} ${r.costUnit.toFixed(4)}`,
-        `${cur} ${r.costTotal.toFixed(2)}`,
-        `${r.marginPct}%`,
-        `${cur} ${r.sellUnit.toFixed(4)}`,
-        `${cur} ${r.sellTotal.toFixed(2)}`,
-      ]),
-      headStyles: { fillColor: [30, 30, 30] },
-      theme: 'striped',
-    })
-    doc.save(`qtybreaks_${product.sku}.pdf`)
+      autoTable(doc, {
+        startY: 32,
+        head: [['QTY', 'FOB', 'Landed', ...lineHeaders, 'Cost unit', 'Cost total', 'Margin', 'Sell unit', 'Sell total']],
+        body: rows.map(r => [
+          r.qty,
+          `${cur} ${r.fob.toFixed(4)}`,
+          `${cur} ${r.landedUnit.toFixed(4)}`,
+          ...r.techs.flatMap(t => t.lines.map(l => `${cur} ${l.unitCost.toFixed(4)}`)),
+          `${cur} ${r.costUnit.toFixed(4)}`,
+          `${cur} ${r.costTotal.toFixed(2)}`,
+          `${r.marginPct.toFixed(1)}%`,
+          `${cur} ${r.sellUnit.toFixed(4)}`,
+          `${cur} ${r.sellTotal.toFixed(2)}`,
+        ]),
+        headStyles: { fillColor: [30, 30, 30] },
+        theme: 'striped',
+      })
+      doc.save(`qtybreaks_${product.sku}.pdf`)
+    } catch (e) {
+      console.error('PDF export error:', e)
+      setToast({ message: 'Could not export to PDF — try reloading the page', type: 'error' })
+    }
   }
 
   if (loading) return <div className="text-center py-12 text-gray-400 text-sm">{T('loading')}</div>
@@ -245,7 +266,7 @@ export default function CalculatorPage() {
               <h2 className="text-sm font-semibold text-gray-900">
                 {product.name} <span className="text-gray-400 font-normal text-xs ml-1">{product.sku}</span>
               </h2>
-              <p className="text-xs text-gray-400 mt-0.5">Margin applied based on total order value</p>
+              <p className="text-xs text-gray-400 mt-0.5">Margin applied per cost line (set in Techniques → Margin %)</p>
             </div>
             <div className="flex gap-2">
               <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">
@@ -264,12 +285,11 @@ export default function CalculatorPage() {
                   <th className="text-right px-4 py-3">QTY</th>
                   <th className="text-right px-3 py-3">FOB</th>
                   <th className="text-right px-3 py-3">Landed</th>
-                  {selTechs.map(t => (
-                    <>
-                      <th key={`${t.id}-orig`} className="text-right px-3 py-3 text-amber-500">{t.name} Orig.</th>
-                      <th key={`${t.id}-hit`}  className="text-right px-3 py-3 text-emerald-500">{t.name} HIT</th>
-                    </>
-                  ))}
+                  {selTechs.flatMap(t => (t.technique_costs ?? []).map(tc => (
+                    <th key={tc.id} className={`text-right px-3 py-3 ${costType(tc.category) === 'FIX' ? 'text-amber-500' : 'text-emerald-500'}`}>
+                      {selTechs.length > 1 ? `${t.name} — ` : ''}{tc.cost_items?.name ?? '—'}
+                    </th>
+                  )))}
                   <th className="text-right px-3 py-3">Cost unit</th>
                   <th className="text-right px-3 py-3">Cost total</th>
                   <th className="text-right px-3 py-3">Margin</th>
@@ -283,16 +303,15 @@ export default function CalculatorPage() {
                     <td className="text-right px-4 py-3 font-semibold text-gray-900">{r.qty.toLocaleString()}</td>
                     <td className="text-right px-3 py-3 font-mono text-gray-400 text-xs">{fmt(r.fob)}</td>
                     <td className="text-right px-3 py-3 font-mono text-blue-600 text-xs">{fmt(r.landedUnit)}</td>
-                    {r.techs.map(t => (
-                      <>
-                        <td key={`${t.id}-orig`} className="text-right px-3 py-3 font-mono text-amber-600 text-xs">{fmt(t.origUnit)}</td>
-                        <td key={`${t.id}-hit`}  className="text-right px-3 py-3 font-mono text-emerald-600 text-xs">{fmt(t.hitUnit)}</td>
-                      </>
-                    ))}
+                    {r.techs.flatMap(t => t.lines.map(l => (
+                      <td key={l.id} className={`text-right px-3 py-3 font-mono text-xs ${costType(l.category) === 'FIX' ? 'text-amber-600' : 'text-emerald-600'}`}>
+                        {fmt(l.unitCost)}
+                      </td>
+                    )))}
                     <td className="text-right px-3 py-3 font-mono text-gray-700 text-xs font-semibold">{fmt(r.costUnit)}</td>
                     <td className="text-right px-3 py-3 font-mono text-gray-500 text-xs">{fmt(r.costTotal)}</td>
                     <td className="text-right px-3 py-3">
-                      <span className="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-lg font-medium">{r.marginPct}%</span>
+                      <span className="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-lg font-medium">{r.marginPct.toFixed(1)}%</span>
                     </td>
                     <td className="text-right px-3 py-3 font-mono text-gray-700 text-xs">{fmt(r.sellUnit)}</td>
                     <td className="text-right px-4 py-3 font-mono font-semibold text-slate-900">{fmt(r.sellTotal)}</td>
@@ -301,18 +320,6 @@ export default function CalculatorPage() {
               </tbody>
             </table>
           </div>
-
-          {tiers.length > 0 && (
-            <div className="px-6 py-3 border-t border-gray-50 flex flex-wrap gap-4 items-center">
-              <span className="text-xs text-gray-400 font-medium uppercase tracking-wider">Margin tiers:</span>
-              {tiers.map(t => (
-                <span key={t.id} className="text-xs text-gray-400">
-                  {config?.currency_symbol}{parseFloat(t.qty_from).toLocaleString()}–{t.qty_to ? `${config?.currency_symbol}${parseFloat(t.qty_to).toLocaleString()}` : '∞'}
-                  {' → '}<span className="font-medium text-gray-600">{t.margin_pct}%</span>
-                </span>
-              ))}
-            </div>
-          )}
         </div>
       )}
 
@@ -321,6 +328,7 @@ export default function CalculatorPage() {
           Select a product to see qty breaks and pricing
         </div>
       )}
+      {toast && <Toast {...toast} onClose={() => setToast(null)} />}
     </div>
   )
 }

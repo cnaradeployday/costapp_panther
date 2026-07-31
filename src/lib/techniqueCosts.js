@@ -24,3 +24,21 @@ export function lineTotal(tc) {
     : null
   return min !== null ? Math.max(raw, min) : raw
 }
+
+// The company's general margin — the lowest configured margin tier — used as the
+// fallback whenever a technique cost line has no margin_pct override of its own.
+export function defaultMarginPct(tiers) {
+  if (!tiers?.length) return 0
+  const lowest = [...tiers].sort((a, b) => parseFloat(a.qty_from) - parseFloat(b.qty_from))[0]
+  return parseFloat(lowest.margin_pct) || 0
+}
+
+export function effectiveMarginPct(tc, tiers) {
+  return tc.margin_pct !== null && tc.margin_pct !== undefined && tc.margin_pct !== ''
+    ? parseFloat(tc.margin_pct)
+    : defaultMarginPct(tiers)
+}
+
+export function sellPrice(cost, marginPct) {
+  return marginPct > 0 ? cost / (1 - marginPct / 100) : cost
+}

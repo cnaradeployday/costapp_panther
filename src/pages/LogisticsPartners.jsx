@@ -142,19 +142,24 @@ export default function LogisticsPartnersPage() {
 
   const filtered = partners.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || p.erp_code.toLowerCase().includes(search.toLowerCase()))
 
-  function handleExport() {
-    exportToExcel('logistics_partners.xlsx', 'Routes',
-      ['Partner', 'ERP Code', 'Origin country', 'Port/Area', 'Mode', 'Load unit', 'Priority', 'Transit days', 'Pricing', 'Active'],
-      filtered.flatMap(partner => {
-        const partnerRoutes = routes.filter(r => r.partner_id === partner.id)
-        return partnerRoutes.length
-          ? partnerRoutes.map(r => [
-              partner.name, partner.erp_code, r.origin_country, r.origin_port, r.mode, r.load_unit, r.priority,
-              r.transit_days, r.pricing_type === 'Unit' ? `${r.currency} ${r.unit_cost}` : 'Price table',
-              r.active ? 'Yes' : 'No',
-            ])
-          : [[partner.name, partner.erp_code, '', '', '', '', '', '', '', partner.active ? 'Yes' : 'No']]
-      }))
+  async function handleExport() {
+    try {
+      await exportToExcel('logistics_partners.xlsx', 'Routes',
+        ['Partner', 'ERP Code', 'Origin country', 'Port/Area', 'Mode', 'Load unit', 'Priority', 'Transit days', 'Pricing', 'Active'],
+        filtered.flatMap(partner => {
+          const partnerRoutes = routes.filter(r => r.partner_id === partner.id)
+          return partnerRoutes.length
+            ? partnerRoutes.map(r => [
+                partner.name, partner.erp_code, r.origin_country, r.origin_port, r.mode, r.load_unit, r.priority,
+                r.transit_days, r.pricing_type === 'Unit' ? `${r.currency} ${r.unit_cost}` : 'Price table',
+                r.active ? 'Yes' : 'No',
+              ])
+            : [[partner.name, partner.erp_code, '', '', '', '', '', '', '', partner.active ? 'Yes' : 'No']]
+        }))
+    } catch (e) {
+      console.error('Excel export error:', e)
+      setToast({ message: 'Error', type: 'error' })
+    }
   }
 
   return (

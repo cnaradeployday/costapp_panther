@@ -75,10 +75,15 @@ export default function LabourPage() {
     }
   }
 
-  function handleExport() {
-    exportToExcel('labour_costs.xlsx', 'Labour costs',
-      ['Skill', 'Experience level', `Cost/hour (${currency})`, `Cost/minute (${currency})`, 'Effective date', 'Active'],
-      rates.map(r => [r.skill, r.experience_level, parseFloat(r.cost_per_hour).toFixed(2), (parseFloat(r.cost_per_hour) / 60).toFixed(4), r.effective_date, r.active ? 'Yes' : 'No']))
+  async function handleExport() {
+    try {
+      await exportToExcel('labour_costs.xlsx', 'Labour costs',
+        ['Skill', 'Experience level', `Cost/hour (${currency})`, `Cost/minute (${currency})`, 'Effective date', 'Active'],
+        rates.map(r => [r.skill, r.experience_level, parseFloat(r.cost_per_hour).toFixed(2), (parseFloat(r.cost_per_hour) / 60).toFixed(4), r.effective_date, r.active ? 'Yes' : 'No']))
+    } catch (e) {
+      console.error('Excel export error:', e)
+      setToast({ message: 'Error exporting to Excel', type: 'error' })
+    }
   }
 
   return (

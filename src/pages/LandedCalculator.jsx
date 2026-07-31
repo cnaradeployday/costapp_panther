@@ -234,23 +234,28 @@ export default function LandedCalculatorPage() {
     } catch { setToast({ message: 'Error', type: 'error' }) }
   }
 
-  function handleExport() {
-    exportToExcel('landed_operations.xlsx', 'Landed Operations',
-      ['Operation', 'Date', 'Route', 'Warehouse', 'Status', 'Products', 'Total volume (m³)', 'Total weight (kg)', 'Freight EUR', 'Ancillary EUR', 'Total landed EUR'],
-      operations.map(op => {
-        const route = routes.find(r => r.id === op.route_id)
-        const warehouse = warehouses.find(w => w.id === op.warehouse_id)
-        return [
-          op.name, op.operation_date,
-          route ? `${route.origin_country} · ${route.origin_port} · ${route.mode}` : '',
-          warehouse?.name || '', op.status, op.landed_operation_lines?.length || 0,
-          parseFloat(op.total_volume_m3 || 0).toFixed(4),
-          parseFloat(op.total_weight_kg || 0).toFixed(3),
-          parseFloat(op.freight_cost_eur || 0).toFixed(2),
-          parseFloat(op.ancillary_cost_eur || 0).toFixed(2),
-          parseFloat(op.total_landed_eur || 0).toFixed(2),
-        ]
-      }))
+  async function handleExport() {
+    try {
+      await exportToExcel('landed_operations.xlsx', 'Landed Operations',
+        ['Operation', 'Date', 'Route', 'Warehouse', 'Status', 'Products', 'Total volume (m³)', 'Total weight (kg)', 'Freight EUR', 'Ancillary EUR', 'Total landed EUR'],
+        operations.map(op => {
+          const route = routes.find(r => r.id === op.route_id)
+          const warehouse = warehouses.find(w => w.id === op.warehouse_id)
+          return [
+            op.name, op.operation_date,
+            route ? `${route.origin_country} · ${route.origin_port} · ${route.mode}` : '',
+            warehouse?.name || '', op.status, op.landed_operation_lines?.length || 0,
+            parseFloat(op.total_volume_m3 || 0).toFixed(4),
+            parseFloat(op.total_weight_kg || 0).toFixed(3),
+            parseFloat(op.freight_cost_eur || 0).toFixed(2),
+            parseFloat(op.ancillary_cost_eur || 0).toFixed(2),
+            parseFloat(op.total_landed_eur || 0).toFixed(2),
+          ]
+        }))
+    } catch (e) {
+      console.error('Excel export error:', e)
+      setToast({ message: 'Error', type: 'error' })
+    }
   }
 
   return (

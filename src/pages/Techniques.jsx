@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, GripVertical } from 'lucide-react'
 import {
   getPrintTechniques, upsertPrintTechnique, deletePrintTechnique,
-  getCostItems, upsertTechniqueCost, deleteTechniqueCost, reorderTechniqueCosts
+  getCostItems, upsertTechniqueCost, deleteTechniqueCost, reorderTechniqueCosts,
+  getMarginTiers
 } from '../lib/supabase'
 import { useApp } from '../lib/AppContext'
-import { costType, effectiveRate, lineRate, lineTotal } from '../lib/techniqueCosts'
+import { costType, effectiveRate, lineRate, lineTotal, defaultMarginPct, effectiveMarginPct } from '../lib/techniqueCosts'
 import {
   Modal, Confirm, Toast, Btn, Input, Select, Badge,
   EmptyState, PageHeader, SearchInput, Toggle, ExportExcelButton
@@ -38,6 +39,7 @@ export default function TechniquesPage() {
   const { T, currency, tabVisible } = useApp()
   const [techniques, setTechniques] = useState([])
   const [allCosts, setAllCosts] = useState([])
+  const [tiers, setTiers] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState(null)
@@ -48,7 +50,7 @@ export default function TechniquesPage() {
   const [confirm, setConfirm] = useState(null)
   const [confirmTc, setConfirmTc] = useState(null)
   const [toast, setToast] = useState(null)
-  const [tcForm, setTcForm] = useState({ cost_item_id: '', quantity: '1', min_charge: '' })
+  const [tcForm, setTcForm] = useState({ cost_item_id: '', quantity: '1', min_charge: '', margin_pct: '' })
   const [addingTc, setAddingTc] = useState(null)
   const [editingTcId, setEditingTcId] = useState(null)
   const [dragInfo, setDragInfo] = useState(null)
@@ -56,9 +58,10 @@ export default function TechniquesPage() {
   async function load() {
     setLoading(true)
     try {
-      const [tech, costs] = await Promise.all([getPrintTechniques(), getCostItems()])
+      const [tech, costs, trs] = await Promise.all([getPrintTechniques(), getCostItems(), getMarginTiers()])
       setTechniques(tech)
       setAllCosts(costs.filter(c => c.category !== 'LANDED' && c.active))
+      setTiers(trs)
     } catch (e) {
       console.error('Techniques load error:', e)
       setToast({ message: T('error'), type: 'error' })
@@ -109,11 +112,12 @@ export default function TechniquesPage() {
         quantity: parseFloat(tcForm.quantity) || 1,
         category: item.category, // inherited from the Cost Item — kept in sync with the Costs page, never re-picked here
         min_charge: tcForm.min_charge === '' ? null : parseFloat(tcForm.min_charge),
+        margin_pct: tcForm.margin_pct === '' ? null : parseFloat(tcForm.margin_pct),
         sort_order: tech?.technique_costs?.length ?? 0,
       })
       setAddingTc(null)
       setEditingTcId(null)
-      setTcForm({ cost_item_id: '', quantity: '1', min_charge: '' })
+      setTcForm({ cost_item_id: '', quantity: '1', min_charge: '', margin_pct: '' })
       setToast({ message: T('saved'), type: 'success' })
       await load()
     } catch { setToast({ message: T('error'), type: 'error' })
@@ -121,7 +125,7 @@ export default function TechniquesPage() {
   }
 
   function openEditTc(tc) {
-    setTcForm({ cost_item_id: tc.cost_item_id, quantity: String(tc.quantity), min_charge: tc.min_charge ?? '' })
+    setTcForm({ cost_item_id: tc.cost_item_id, quantity: String(tc.quantity), min_charge: tc.min_charge ?? '', margin_pct: tc.margin_pct ?? '' })
     setEditingTcId(tc.id)
     setAddingTc(tc.technique_id)
   }
@@ -129,7 +133,7 @@ export default function TechniquesPage() {
   function cancelTc() {
     setAddingTc(null)
     setEditingTcId(null)
-    setTcForm({ cost_item_id: '', quantity: '1', min_charge: '' })
+    setTcForm({ cost_item_id: '', quantity: '1', min_charge: '', margin_pct: '' })
   }
 
   async function handleDeleteTc(id) {
@@ -172,18 +176,23 @@ export default function TechniquesPage() {
 
   const filtered = techniques.filter(t => t.name.toLowerCase().includes(search.toLowerCase()))
 
-  function handleExport() {
-    exportToExcel('techniques.xlsx', 'Techniques',
-      ['Technique', T('active'), 'Step', 'Description', 'Cost type', 'Unit', 'Qty', `Cost/unit (${currency})`, `Total cost (${currency})`, 'Min charge'],
-      filtered.flatMap(tech =>
-        tech.technique_costs?.length
-          ? tech.technique_costs.map((tc, idx) => [
-              tech.name, tech.active ? 'Yes' : 'No', idx + 1, tc.cost_items?.name || '',
-              costType(tc.category), tc.cost_items?.unit || '', tc.quantity,
-              fmt2(lineRate(tc)), fmt2(lineTotal(tc)), tc.min_charge ?? '',
-            ])
-          : [[tech.name, tech.active ? 'Yes' : 'No', '', '', '', '', '', '', '', '']]
-      ))
+  async function handleExport() {
+    try {
+      await exportToExcel('techniques.xlsx', 'Techniques',
+        ['Technique', T('active'), 'Step', 'Description', 'Cost type', 'Unit', 'Qty', `Cost/unit (${currency})`, `Total cost (${currency})`, 'Min charge', 'Margin %'],
+        filtered.flatMap(tech =>
+          tech.technique_costs?.length
+            ? tech.technique_costs.map((tc, idx) => [
+                tech.name, tech.active ? 'Yes' : 'No', idx + 1, tc.cost_items?.name || '',
+                costType(tc.category), tc.cost_items?.unit || '', tc.quantity,
+                fmt2(lineRate(tc)), fmt2(lineTotal(tc)), tc.min_charge ?? '', effectiveMarginPct(tc, tiers),
+              ])
+            : [[tech.name, tech.active ? 'Yes' : 'No', '', '', '', '', '', '', '', '', '']]
+        ))
+    } catch (e) {
+      console.error('Excel export error:', e)
+      setToast({ message: T('error'), type: 'error' })
+    }
   }
 
   return (
@@ -235,7 +244,7 @@ export default function TechniquesPage() {
                   <div className="border-t border-gray-50 px-5 py-4">
                     <div className="flex items-center justify-between mb-3">
                       <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">{T('technique_costs')}</p>
-                      <Btn size="sm" variant="secondary" onClick={() => { setEditingTcId(null); setTcForm({ cost_item_id: '', quantity: '1', min_charge: '' }); setAddingTc(tech.id) }}>
+                      <Btn size="sm" variant="secondary" onClick={() => { setEditingTcId(null); setTcForm({ cost_item_id: '', quantity: '1', min_charge: '', margin_pct: '' }); setAddingTc(tech.id) }}>
                         <Plus size={12}/>{T('add_cost_to_technique')}
                       </Btn>
                     </div>
@@ -275,6 +284,10 @@ export default function TechniquesPage() {
                             value={tcForm.min_charge}
                             onChange={e => setTcForm(f => ({ ...f, min_charge: e.target.value }))}
                             className="w-24" placeholder="—" />
+                          <Input label="Margin %" type="number" step="0.1" min="0" max="100"
+                            value={tcForm.margin_pct}
+                            onChange={e => setTcForm(f => ({ ...f, margin_pct: e.target.value }))}
+                            className="w-24" placeholder={`${defaultMarginPct(tiers)} (general)`} />
                           <div className="flex gap-2">
                             <Btn size="sm" onClick={() => handleAddTc(tech.id)} disabled={saving || !tcForm.cost_item_id}>{editingTcId ? T('save') : T('add')}</Btn>
                             <Btn size="sm" variant="ghost" onClick={cancelTc}>{T('cancel')}</Btn>
@@ -299,6 +312,7 @@ export default function TechniquesPage() {
                               <th className="text-right px-2 py-2">Cost per unit of measure</th>
                               <th className="text-right px-2 py-2">Total cost</th>
                               <th className="text-right px-2 py-2">Min charge</th>
+                              <th className="text-right px-2 py-2">Margin %</th>
                               <th className="w-8" />
                               <th className="w-8" />
                             </tr>
@@ -340,6 +354,10 @@ export default function TechniquesPage() {
                                   <td className="px-2 py-1.5 text-right">
                                     <EditableCell value={tc.min_charge}
                                       onCommit={v => commitTcField(tech.id, tc.id, 'min_charge', v)} />
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right">
+                                    <EditableCell value={effectiveMarginPct(tc, tiers)}
+                                      onCommit={v => commitTcField(tech.id, tc.id, 'margin_pct', v)} />
                                   </td>
                                   <td className="px-2 py-1.5">
                                     <button onClick={() => openEditTc(tc)}

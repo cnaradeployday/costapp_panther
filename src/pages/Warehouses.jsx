@@ -48,10 +48,15 @@ export default function WarehousesPage() {
     } catch { setToast({ message: 'Error deleting', type: 'error' }) }
   }
 
-  function handleExport() {
-    exportToExcel('warehouses.xlsx', 'Warehouses',
-      ['Name', 'Country', 'City', 'Address', 'Default', 'Active'],
-      items.map(w => [w.name, w.country, w.city || '', w.address || '', w.is_default ? 'Yes' : 'No', w.active ? 'Yes' : 'No']))
+  async function handleExport() {
+    try {
+      await exportToExcel('warehouses.xlsx', 'Warehouses',
+        ['Name', 'Country', 'City', 'Address', 'Default', 'Active'],
+        items.map(w => [w.name, w.country, w.city || '', w.address || '', w.is_default ? 'Yes' : 'No', w.active ? 'Yes' : 'No']))
+    } catch (e) {
+      console.error('Excel export error:', e)
+      setToast({ message: 'Error exporting to Excel', type: 'error' })
+    }
   }
 
   return (
