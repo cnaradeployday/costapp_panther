@@ -4,7 +4,8 @@ import { getCostItems, upsertCostItem, deleteCostItem, getPrintTechniques, getLa
 import { supabase } from '../lib/supabase'
 import { useApp } from '../lib/AppContext'
 import { costType, effectiveRate } from '../lib/techniqueCosts'
-import { Modal, Confirm, Toast, Btn, Input, Select, Badge, CategoryBadge, EmptyState, PageHeader, SearchInput, Toggle } from '../components/ui'
+import { Modal, Confirm, Toast, Btn, Input, Select, Badge, CategoryBadge, EmptyState, PageHeader, SearchInput, Toggle, ExportExcelButton } from '../components/ui'
+import { exportToExcel } from '../lib/exportExcel'
 
 const CATEGORIES = ['LANDED', 'ORIGINATION', 'HIT', 'QC_PRINT']
 const empty = { name: '', unit: '', category: 'LANDED', value_per_unit: '', value_type: 'nominal', active: true, technique_ids: [], labour_rate_id: '' }
@@ -113,10 +114,22 @@ export default function CostsPage() {
   const selectedUnit = units.find(u => u.name === form.unit)
   const isPct = selectedUnit?.type === 'percentage' || form.value_type === 'percentage_of_fob'
 
+  function handleExport() {
+    exportToExcel('cost_items.xlsx', 'Cost Items',
+      [T('name'), T('unit'), T('category'), 'Cost type', 'Techniques', T('value_per_unit'), T('active')],
+      filtered.map(item => [
+        item.name, item.unit, T(item.category),
+        item.category === 'LANDED' ? '—' : costType(item.category),
+        !item.technique_ids?.length ? 'All' : techniques.filter(t => item.technique_ids.includes(t.id)).map(t => t.name).join(', '),
+        item.value_type === 'percentage_of_fob' ? `${item.value_per_unit}% of FOB` : fmt(effectiveRate(item)),
+        item.active ? 'Yes' : 'No',
+      ]))
+  }
+
   return (
     <div>
       <PageHeader title={T('cost_items')}
-        action={<Btn onClick={openNew}><Plus size={15}/>{T('new_cost')}</Btn>} />
+        action={<div className="flex gap-2"><ExportExcelButton onClick={handleExport} disabled={!filtered.length} /><Btn onClick={openNew}><Plus size={15}/>{T('new_cost')}</Btn></div>} />
 
       <div className="flex gap-3 mb-5 flex-wrap">
         <SearchInput value={search} onChange={setSearch} placeholder={T('search')} />

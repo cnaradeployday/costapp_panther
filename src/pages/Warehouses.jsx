@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { Plus, Pencil, Trash2, Star } from 'lucide-react'
 import { getWarehouses, upsertWarehouse, deleteWarehouse } from '../lib/landed'
 import { useApp } from '../lib/AppContext'
-import { Modal, Confirm, Toast, Btn, Input, Toggle, PageHeader, EmptyState } from '../components/ui'
+import { Modal, Confirm, Toast, Btn, Input, Toggle, PageHeader, EmptyState, ExportExcelButton } from '../components/ui'
+import { exportToExcel } from '../lib/exportExcel'
 
 const empty = { name: '', country: '', city: '', address: '', is_default: false, active: true }
 
@@ -47,10 +48,16 @@ export default function WarehousesPage() {
     } catch { setToast({ message: 'Error deleting', type: 'error' }) }
   }
 
+  function handleExport() {
+    exportToExcel('warehouses.xlsx', 'Warehouses',
+      ['Name', 'Country', 'City', 'Address', 'Default', 'Active'],
+      items.map(w => [w.name, w.country, w.city || '', w.address || '', w.is_default ? 'Yes' : 'No', w.active ? 'Yes' : 'No']))
+  }
+
   return (
     <div>
       <PageHeader title="Warehouses & Destinations"
-        action={<Btn onClick={openNew}><Plus size={15}/>New warehouse</Btn>} />
+        action={<div className="flex gap-2"><ExportExcelButton onClick={handleExport} disabled={!items.length} /><Btn onClick={openNew}><Plus size={15}/>New warehouse</Btn></div>} />
 
       {loading ? <div className="text-center py-12 text-gray-400 text-sm">Loading...</div>
       : items.length === 0 ? <EmptyState message="No warehouses configured" />

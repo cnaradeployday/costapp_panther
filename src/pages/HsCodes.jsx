@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { useApp } from '../lib/AppContext'
-import { Modal, Confirm, Toast, Btn, Input, Toggle, PageHeader, EmptyState } from '../components/ui'
+import { Modal, Confirm, Toast, Btn, Input, Toggle, PageHeader, EmptyState, ExportExcelButton } from '../components/ui'
+import { exportToExcel } from '../lib/exportExcel'
 
 async function getHsCodes() {
   const { supabase } = await import('../lib/supabase')
@@ -70,10 +71,16 @@ export default function HsCodesPage() {
     catch { setToast({ message: 'Cannot delete — in use by a product', type: 'error' }); setConfirm(null) }
   }
 
+  function handleExport() {
+    exportToExcel('hs_codes.xlsx', 'HS Codes',
+      ['HS Code', 'Description', 'Duty rate % (non-EU)', 'Notes', 'Active'],
+      items.map(h => [h.code, h.description, (parseFloat(h.duty_rate) * 100).toFixed(2), h.notes || '', h.active ? 'Yes' : 'No']))
+  }
+
   return (
     <div>
       <PageHeader title="HS Codes & Import Duties"
-        action={<Btn onClick={openNew}><Plus size={15}/>New HS code</Btn>} />
+        action={<div className="flex gap-2"><ExportExcelButton onClick={handleExport} disabled={!items.length} /><Btn onClick={openNew}><Plus size={15}/>New HS code</Btn></div>} />
       <div className="mb-4 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-xs text-blue-700">
         <strong>How it works:</strong> Each HS code has a duty rate for non-EU imports. Products from EU countries always pay 0%. Products from outside the EU pay the rate here, calculated on FOB.
       </div>

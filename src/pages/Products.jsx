@@ -5,7 +5,8 @@ import {
   getCostItems, upsertProductCost, deleteProductCost, getPrintTechniques
 } from '../lib/supabase'
 import { useApp } from '../lib/AppContext'
-import { Modal, Confirm, Toast, Btn, Input, Select, EmptyState, PageHeader, SearchInput, Toggle } from '../components/ui'
+import { Modal, Confirm, Toast, Btn, Input, Select, EmptyState, PageHeader, SearchInput, Toggle, ExportExcelButton } from '../components/ui'
+import { exportToExcel } from '../lib/exportExcel'
 
 const empty = { sku: '', name: '', ncm: '', origin_country: '', fob_price: '', weight_kg: '', length_cm: '', width_cm: '', height_cm: '', hs_code_id: '', active: true, technique_ids: [] }
 
@@ -178,10 +179,27 @@ export default function ProductsPage() {
     return l * w * h / 1_000_000
   }
 
+  function handleExport() {
+    exportToExcel('products.xlsx', 'Products',
+      [T('sku'), T('name'), T('origin_country'), T('fob_price'), 'Weight (kg)', 'Volume (m³)', 'HS code', 'Landed total', T('active')],
+      filtered.map(prod => {
+        const fob = parseFloat(prod.fob_price) || 0
+        const totalLanded = prod.product_costs?.reduce((s, pc) => s + getEffectiveValue(pc, fob), 0) ?? 0
+        const duty = calcImportDuty(prod)
+        const hs = hsCodes.find(h => h.id === prod.hs_code_id)
+        return [
+          prod.sku, prod.name, prod.origin_country || '', fob.toFixed(4),
+          prod.weight_kg || 0, volM3(prod).toFixed(6), hs?.code || '',
+          (fob + totalLanded + (duty?.amount || 0)).toFixed(4),
+          prod.active ? 'Yes' : 'No',
+        ]
+      }))
+  }
+
   return (
     <div>
       <PageHeader title={T('products_title')}
-        action={<Btn onClick={openNew}><Plus size={15}/>{T('new_product')}</Btn>} />
+        action={<div className="flex gap-2"><ExportExcelButton onClick={handleExport} disabled={!filtered.length} /><Btn onClick={openNew}><Plus size={15}/>{T('new_product')}</Btn></div>} />
 
       <div className="mb-5">
         <SearchInput value={search} onChange={setSearch} placeholder={T('search')} />

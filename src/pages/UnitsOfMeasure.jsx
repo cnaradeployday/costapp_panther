@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../lib/AppContext'
-import { Btn, Input, Toast, PageHeader, Confirm } from '../components/ui'
+import { Btn, Input, Toast, PageHeader, Confirm, ExportExcelButton } from '../components/ui'
+import { exportToExcel } from '../lib/exportExcel'
 
 async function getUnits() {
   const { data, error } = await supabase.from('units_of_measure').select('*').order('name')
@@ -59,11 +60,18 @@ export default function UnitsPage() {
     }
   }
 
+  function handleExport() {
+    exportToExcel('units_of_measure.xlsx', 'Units',
+      ['Name', 'Type'],
+      units.map(u => [u.name, u.type === 'percentage' ? '% of FOB' : 'Nominal']))
+  }
+
   if (loading) return <div className="text-center py-12 text-gray-400 text-sm">Loading...</div>
 
   return (
     <div>
-      <PageHeader title="Units of measure" />
+      <PageHeader title="Units of measure"
+        action={<ExportExcelButton onClick={handleExport} disabled={!units.length} />} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden mb-4">

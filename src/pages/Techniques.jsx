@@ -8,8 +8,9 @@ import { useApp } from '../lib/AppContext'
 import { costType, effectiveRate, lineRate, lineTotal } from '../lib/techniqueCosts'
 import {
   Modal, Confirm, Toast, Btn, Input, Select, Badge,
-  EmptyState, PageHeader, SearchInput, Toggle
+  EmptyState, PageHeader, SearchInput, Toggle, ExportExcelButton
 } from '../components/ui'
+import { exportToExcel } from '../lib/exportExcel'
 
 const PRESETS = ['pad_printing', 'screen_printing', 'embroidery', 'laser', 'dtf', 'sublimation', 'uv_printing', 'other']
 const empty = { name: '', base_preset: '', active: true }
@@ -171,10 +172,24 @@ export default function TechniquesPage() {
 
   const filtered = techniques.filter(t => t.name.toLowerCase().includes(search.toLowerCase()))
 
+  function handleExport() {
+    exportToExcel('techniques.xlsx', 'Techniques',
+      ['Technique', T('active'), 'Step', 'Description', 'Cost type', 'Unit', 'Qty', `Cost/unit (${currency})`, `Total cost (${currency})`, 'Min charge'],
+      filtered.flatMap(tech =>
+        tech.technique_costs?.length
+          ? tech.technique_costs.map((tc, idx) => [
+              tech.name, tech.active ? 'Yes' : 'No', idx + 1, tc.cost_items?.name || '',
+              costType(tc.category), tc.cost_items?.unit || '', tc.quantity,
+              fmt2(lineRate(tc)), fmt2(lineTotal(tc)), tc.min_charge ?? '',
+            ])
+          : [[tech.name, tech.active ? 'Yes' : 'No', '', '', '', '', '', '', '', '']]
+      ))
+  }
+
   return (
     <div>
       <PageHeader title={T('techniques_title')}
-        action={<Btn onClick={openNew}><Plus size={15}/>{T('new_technique')}</Btn>} />
+        action={<div className="flex gap-2"><ExportExcelButton onClick={handleExport} disabled={!filtered.length} /><Btn onClick={openNew}><Plus size={15}/>{T('new_technique')}</Btn></div>} />
 
       <div className="mb-5">
         <SearchInput value={search} onChange={setSearch} placeholder={T('search')} />

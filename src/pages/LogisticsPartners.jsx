@@ -7,7 +7,8 @@ import {
   getAncillaryCosts, upsertAncillaryCost, deleteAncillaryCost
 } from '../lib/landed'
 import { useApp } from '../lib/AppContext'
-import { Modal, Confirm, Toast, Btn, Input, Select, Toggle, PageHeader, EmptyState, SearchInput } from '../components/ui'
+import { Modal, Confirm, Toast, Btn, Input, Select, Toggle, PageHeader, EmptyState, SearchInput, ExportExcelButton } from '../components/ui'
+import { exportToExcel } from '../lib/exportExcel'
 
 const MODES = ['By Sea', 'By Air', 'By Road', 'By Train']
 const PRIORITIES = ['Default (1st Choice)', '2nd Choice', '3rd Choice', 'Back up Only']
@@ -141,10 +142,25 @@ export default function LogisticsPartnersPage() {
 
   const filtered = partners.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || p.erp_code.toLowerCase().includes(search.toLowerCase()))
 
+  function handleExport() {
+    exportToExcel('logistics_partners.xlsx', 'Routes',
+      ['Partner', 'ERP Code', 'Origin country', 'Port/Area', 'Mode', 'Load unit', 'Priority', 'Transit days', 'Pricing', 'Active'],
+      filtered.flatMap(partner => {
+        const partnerRoutes = routes.filter(r => r.partner_id === partner.id)
+        return partnerRoutes.length
+          ? partnerRoutes.map(r => [
+              partner.name, partner.erp_code, r.origin_country, r.origin_port, r.mode, r.load_unit, r.priority,
+              r.transit_days, r.pricing_type === 'Unit' ? `${r.currency} ${r.unit_cost}` : 'Price table',
+              r.active ? 'Yes' : 'No',
+            ])
+          : [[partner.name, partner.erp_code, '', '', '', '', '', '', '', partner.active ? 'Yes' : 'No']]
+      }))
+  }
+
   return (
     <div>
       <PageHeader title="Logistics Partners"
-        action={<Btn onClick={openNewPartner}><Plus size={15}/>New partner</Btn>} />
+        action={<div className="flex gap-2"><ExportExcelButton onClick={handleExport} disabled={!filtered.length} /><Btn onClick={openNewPartner}><Plus size={15}/>New partner</Btn></div>} />
 
       <div className="mb-5">
         <SearchInput value={search} onChange={setSearch} placeholder="Search partners..." />

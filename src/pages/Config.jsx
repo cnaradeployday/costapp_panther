@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { updateInstanceConfig } from '../lib/supabase'
 import { useApp } from '../lib/AppContext'
-import { Input, Select, Btn, Toast, PageHeader, Modal, Badge } from '../components/ui'
+import { Input, Select, Btn, Toast, PageHeader, Modal, Badge, ExportExcelButton } from '../components/ui'
 import { getUsers, updateUserRole, getAccessToken } from '../lib/supabase'
+import { exportToExcel } from '../lib/exportExcel'
 import { Plus, KeyRound } from 'lucide-react'
 
 // ── Config Page ───────────────────────────────────────────────
@@ -163,13 +164,20 @@ export function UsersPage() {
 
   const roleColors = { superadmin: 'violet', admin: 'amber', user: 'gray' }
 
+  function handleExport() {
+    exportToExcel('users.xlsx', 'Users', ['Email', T('role')], users.map(u => [u.email, u.role]))
+  }
+
   return (
     <div>
       <PageHeader title={T('users_title')}
         action={
-          <Btn onClick={() => setModal(true)}>
-            <Plus size={15}/>Invite user
-          </Btn>
+          <div className="flex gap-2">
+            <ExportExcelButton onClick={handleExport} disabled={!users.length} />
+            <Btn onClick={() => setModal(true)}>
+              <Plus size={15}/>Invite user
+            </Btn>
+          </div>
         }
       />
 

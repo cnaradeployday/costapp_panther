@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { X, AlertTriangle } from 'lucide-react'
+import { X, AlertTriangle, FileSpreadsheet } from 'lucide-react'
 
 // ── Modal ─────────────────────────────────────────────────────
 export function Modal({ open, onClose, title, children, width = 'max-w-2xl' }) {
@@ -161,6 +161,16 @@ export function PageHeader({ title, action }) {
       <h1 className="text-2xl font-semibold text-gray-900">{title}</h1>
       {action}
     </div>
+  )
+}
+
+// ── ExportExcelButton ────────────────────────────────────────
+export function ExportExcelButton({ onClick, disabled, label = 'Excel' }) {
+  return (
+    <button onClick={onClick} disabled={disabled}
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
+      <FileSpreadsheet size={13}/> {label}
+    </button>
   )
 }
 

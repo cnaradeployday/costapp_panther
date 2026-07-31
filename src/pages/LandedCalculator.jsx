@@ -7,7 +7,8 @@ import {
 } from '../lib/landed'
 import { getProducts } from '../lib/supabase'
 import { useApp } from '../lib/AppContext'
-import { Modal, Confirm, Toast, Btn, Input, PageHeader, EmptyState } from '../components/ui'
+import { Modal, Confirm, Toast, Btn, Input, PageHeader, EmptyState, ExportExcelButton } from '../components/ui'
+import { exportToExcel } from '../lib/exportExcel'
 
 const STATUS_COLORS = {
   draft: 'bg-amber-50 text-amber-700',
@@ -233,10 +234,29 @@ export default function LandedCalculatorPage() {
     } catch { setToast({ message: 'Error', type: 'error' }) }
   }
 
+  function handleExport() {
+    exportToExcel('landed_operations.xlsx', 'Landed Operations',
+      ['Operation', 'Date', 'Route', 'Warehouse', 'Status', 'Products', 'Total volume (m³)', 'Total weight (kg)', 'Freight EUR', 'Ancillary EUR', 'Total landed EUR'],
+      operations.map(op => {
+        const route = routes.find(r => r.id === op.route_id)
+        const warehouse = warehouses.find(w => w.id === op.warehouse_id)
+        return [
+          op.name, op.operation_date,
+          route ? `${route.origin_country} · ${route.origin_port} · ${route.mode}` : '',
+          warehouse?.name || '', op.status, op.landed_operation_lines?.length || 0,
+          parseFloat(op.total_volume_m3 || 0).toFixed(4),
+          parseFloat(op.total_weight_kg || 0).toFixed(3),
+          parseFloat(op.freight_cost_eur || 0).toFixed(2),
+          parseFloat(op.ancillary_cost_eur || 0).toFixed(2),
+          parseFloat(op.total_landed_eur || 0).toFixed(2),
+        ]
+      }))
+  }
+
   return (
     <div>
       <PageHeader title="LANDED Cost Calculator"
-        action={<Btn onClick={openNewOp}><Plus size={15}/>New operation</Btn>} />
+        action={<div className="flex gap-2"><ExportExcelButton onClick={handleExport} disabled={!operations.length} /><Btn onClick={openNewOp}><Plus size={15}/>New operation</Btn></div>} />
 
       {loading ? <div className="text-center py-12 text-gray-400 text-sm">Loading...</div>
       : operations.length === 0 ? <EmptyState message="No operations yet — create one to start calculating landed costs" />

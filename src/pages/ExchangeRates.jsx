@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { Plus, Trash2, TrendingUp } from 'lucide-react'
 import { getExchangeRates, upsertExchangeRate, deleteExchangeRate } from '../lib/landed'
 import { useApp } from '../lib/AppContext'
-import { Confirm, Toast, Btn, Input, PageHeader } from '../components/ui'
+import { Confirm, Toast, Btn, Input, PageHeader, ExportExcelButton } from '../components/ui'
+import { exportToExcel } from '../lib/exportExcel'
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'STG', 'CNY']
 const empty = { currency_from: 'USD', currency_to: 'EUR', rate: '', valid_from: new Date().toISOString().split('T')[0], valid_to: '', notes: '' }
@@ -56,9 +57,24 @@ export default function ExchangeRatesPage() {
     return acc
   }, {})
 
+  function handleExport() {
+    const today = new Date().toISOString().split('T')[0]
+    exportToExcel('exchange_rates.xlsx', 'Exchange Rates',
+      ['Pair', 'Rate', 'Valid from', 'Valid to', 'Notes', 'Status'],
+      rates.map(r => [
+        `${r.currency_from}→${r.currency_to}`,
+        parseFloat(r.rate).toFixed(6),
+        r.valid_from,
+        r.valid_to || '',
+        r.notes || '',
+        (r.valid_from <= today && (!r.valid_to || r.valid_to >= today)) ? 'Active' : 'Expired',
+      ]))
+  }
+
   return (
     <div>
-      <PageHeader title="Exchange Rates" />
+      <PageHeader title="Exchange Rates"
+        action={<ExportExcelButton onClick={handleExport} disabled={!rates.length} />} />
 
       {/* Formulario de nueva tasa */}
       <div className="bg-white rounded-2xl border border-gray-100 p-5 mb-6">

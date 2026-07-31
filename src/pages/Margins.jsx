@@ -5,7 +5,8 @@ import {
   getQtyBreaks, upsertQtyBreak, deleteQtyBreak
 } from '../lib/supabase'
 import { useApp } from '../lib/AppContext'
-import { Btn, Input, Toast, PageHeader, Confirm } from '../components/ui'
+import { Btn, Input, Toast, PageHeader, Confirm, ExportExcelButton } from '../components/ui'
+import { exportToExcel } from '../lib/exportExcel'
 
 export default function MarginsPage() {
   const { currency, tabVisible } = useApp()
@@ -58,9 +59,20 @@ export default function MarginsPage() {
   async function handleAddBreak() {
     const qty = parseInt(breakForm.quantity)
     if (!qty || qty <= 0) return
+    if (breaks.some(b => b.quantity === qty)) {
+      setToast({ message: 'That quantity already exists', type: 'error' })
+      return
+    }
     setSavingBreak(true)
     try {
-      await upsertQtyBreak({ quantity: qty, is_default: true, sort_order: breaks.length + 1 })
+      const inserted = await upsertQtyBreak({ quantity: qty, is_default: true, sort_order: breaks.length + 1 })
+      // re-sequence sort_order to match ascending quantity order
+      const sorted = [...breaks, inserted].sort((a, b) => a.quantity - b.quantity)
+      const updates = sorted
+        .map((b, i) => ({ b, sort_order: i + 1 }))
+        .filter(({ b, sort_order }) => b.sort_order !== sort_order)
+        .map(({ b, sort_order }) => upsertQtyBreak({ ...b, sort_order }))
+      await Promise.all(updates)
       setBreakForm({ quantity: '' })
       setToast({ message: 'Saved', type: 'success' })
       await load()
@@ -76,11 +88,21 @@ export default function MarginsPage() {
     } catch { setToast({ message: 'Error', type: 'error' }) }
   }
 
+  function handleExport() {
+    exportToExcel('margins_and_breaks.xlsx', 'Margins & Breaks',
+      ['Type', 'Order value from', 'Up to', 'Margin %', 'Qty break'],
+      [
+        ...tiers.map(t => ['Margin tier', parseFloat(t.qty_from), t.qty_to ? parseFloat(t.qty_to) : '∞', t.margin_pct, '']),
+        ...breaks.map(b => ['Qty break', '', '', '', b.quantity]),
+      ])
+  }
+
   if (loading) return <div className="text-center py-12 text-gray-400 text-sm">Loading...</div>
 
   return (
     <div>
-      <PageHeader title="Margins & Qty breaks" />
+      <PageHeader title="Margins & Qty breaks"
+        action={<ExportExcelButton onClick={handleExport} disabled={!tiers.length && !breaks.length} />} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 

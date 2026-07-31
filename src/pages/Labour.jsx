@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { getLabourRates, upsertLabourRate, deleteLabourRate } from '../lib/supabase'
 import { useApp } from '../lib/AppContext'
-import { Modal, Confirm, Toast, Btn, Input, EmptyState, PageHeader, Toggle } from '../components/ui'
+import { Modal, Confirm, Toast, Btn, Input, EmptyState, PageHeader, Toggle, ExportExcelButton } from '../components/ui'
+import { exportToExcel } from '../lib/exportExcel'
 
 const SKILLS = ['Printer', 'Assembly', 'Logistics']
 const LEVELS = ['Trainee (1-3 years)', 'Skilled (4+ years)']
@@ -74,10 +75,16 @@ export default function LabourPage() {
     }
   }
 
+  function handleExport() {
+    exportToExcel('labour_costs.xlsx', 'Labour costs',
+      ['Skill', 'Experience level', `Cost/hour (${currency})`, `Cost/minute (${currency})`, 'Effective date', 'Active'],
+      rates.map(r => [r.skill, r.experience_level, parseFloat(r.cost_per_hour).toFixed(2), (parseFloat(r.cost_per_hour) / 60).toFixed(4), r.effective_date, r.active ? 'Yes' : 'No']))
+  }
+
   return (
     <div>
       <PageHeader title="Labour costs"
-        action={<Btn onClick={openNew}><Plus size={15}/>New rate</Btn>} />
+        action={<div className="flex gap-2"><ExportExcelButton onClick={handleExport} disabled={!rates.length} /><Btn onClick={openNew}><Plus size={15}/>New rate</Btn></div>} />
 
       {loading ? (
         <div className="text-center py-12 text-gray-400 text-sm">{T('loading')}</div>
